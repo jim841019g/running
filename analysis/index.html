@@ -140,7 +140,7 @@ tr:last-child td { border-bottom: none; }
 td.num, th.num { text-align: right; }
 #race-table td:first-child, #race-table td:nth-child(3), #race-table td:nth-child(4), #race-table td:nth-child(5), #race-table td:nth-child(6) { white-space: nowrap; }
 #race-table { min-width: 720px; }
-#race-table td:first-child { padding-right: 18px; }
+#race-table td:first-child, #race-table th:first-child { min-width: 118px; padding-right: 20px; }
 .table-scroll { overflow-x: auto; }
 .pill { display: inline-block; font-size: 11.5px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--ink-2); white-space: nowrap; }
 .pill.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
@@ -200,7 +200,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
 
   <section>
     <h2>半馬成績進步史</h2>
-    <p class="sub">歷年半程馬拉松完賽時間（越下方越快）。2014 年的兩場遠古紀錄見下方比賽表。</p>
+    <p class="sub">2014 至今所有半程馬拉松完賽時間（越下方越快），含手動補登的官方成績；2016–2023 的空白就是那段長休。</p>
     <div class="card">
       <div class="chart-scroll" id="hm-chart"></div>
     </div>
@@ -1112,30 +1112,38 @@ $("#kpis").innerHTML = kpis.map(([v,u,l]) =>
 
 // ---- 半馬進步史 ----
 (function hmChart() {
-  const pts = hms.filter(a => a.d >= "2024-01-01");
-  const W = 900, H = 280, ML = 56, MR = 20, MT = 20, MB = 34;
-  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", style: "min-width:640px; display:block;" });
+  const pts = [...hms]; // 全部半馬，2014 起
+  const W = 940, H = 320, ML = 56, MR = 24, MT = 24, MB = 40;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", style: "min-width:720px; display:block;" });
   const iw = W - ML - MR, ih = H - MT - MB;
   const t0 = dateOf(pts[0].d).getTime(), t1 = dateOf(pts[pts.length-1].d).getTime();
   const x = d => ML + (dateOf(d).getTime() - t0) / (t1 - t0) * iw;
-  const yMin = 95*60, yMax = 125*60; // 1:35 ~ 2:05
+  const sMin = Math.min(...pts.map(p => p.s)), sMax = Math.max(...pts.map(p => p.s));
+  const yMin = Math.floor((sMin - 300) / 600) * 600, yMax = Math.ceil((sMax + 300) / 600) * 600;
   const y = s => MT + (s - yMin) / (yMax - yMin) * ih;
-  for (let g = 100*60; g <= 120*60; g += 10*60) {
+  const step = (yMax - yMin) > 3600 ? 15*60 : 10*60;
+  for (let g = yMin; g <= yMax; g += step) {
     el("line", { x1: ML, x2: W-MR, y1: y(g), y2: y(g), stroke: "var(--grid)", "stroke-width": 1 }, svg);
     el("text", { x: ML-8, y: y(g)+4, "text-anchor": "end", "font-size": 11, fill: "var(--ink-3)" }, svg).textContent = fmtDur(g);
   }
+  // 年份刻度
+  const y0 = dateOf(pts[0].d).getFullYear(), y1r = dateOf(pts[pts.length-1].d).getFullYear();
+  for (let yr = y0; yr <= y1r; yr += 2) {
+    const d = `${yr}-01-01`;
+    if (dateOf(d).getTime() >= t0 && dateOf(d).getTime() <= t1)
+      el("text", { x: x(d), y: H-8, "text-anchor": "middle", "font-size": 11, fill: "var(--ink-3)" }, svg).textContent = yr;
+  }
   const path = pts.map((p,i) => `${i?"L":"M"}${x(p.d).toFixed(1)},${y(p.s).toFixed(1)}`).join("");
   el("path", { d: path, fill: "none", stroke: "var(--s-run)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
-  pts.forEach(p => {
+  pts.forEach((p, i) => {
     const isPB = p === bestHM;
-    const c = el("circle", { cx: x(p.d), cy: y(p.s), r: isPB ? 6.5 : 5, fill: "var(--s-run)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
+    const c = el("circle", { cx: x(p.d), cy: y(p.s), r: isPB ? 6.5 : 4.5, fill: "var(--s-run)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
     if (isPB) el("circle", { cx: x(p.d), cy: y(p.s), r: 10, fill: "none", stroke: "var(--s-run)", "stroke-width": 1.5, opacity: 0.5 }, svg);
-    el("text", { x: x(p.d), y: y(p.s)-13, "text-anchor": "middle", "font-size": 11.5, "font-weight": 600, fill: "var(--ink-2)" }, svg).textContent = fmtDur(p.s);
+    // 標籤上下交錯避免相撞（近年點很密）
+    const above = i % 2 === 0;
+    el("text", { x: x(p.d), y: above ? y(p.s)-12 : y(p.s)+22, "text-anchor": "middle", "font-size": 11, "font-weight": 600, fill: "var(--ink-2)" }, svg).textContent = fmtDur(p.s);
     c.addEventListener("mousemove", ev => showTip(ev, `<b>${p.n||"半馬"}</b><br>${p.d} · ${fmtKm(p.m)} km<br>${fmtDur(p.s)}（${fmtPace(p.s/(p.m/1000))}/km）`));
     c.addEventListener("mouseleave", hideTip);
-  });
-  pts.forEach(p => {
-    el("text", { x: x(p.d), y: H-10, "text-anchor": "middle", "font-size": 10.5, fill: "var(--ink-3)" }, svg).textContent = p.d.slice(2,7);
   });
   $("#hm-chart").appendChild(svg);
 })();
