@@ -1092,7 +1092,7 @@ const dates = modern.map(a => a.d).sort();
 $("#meta-range").textContent = `${dates[0]} ～ ${dates[dates.length-1]}（另含 2014–2023 手動補登的歷史比賽）`;
 $("#meta-count").textContent = `共 ${A.length} 筆活動 · 體重 63 kg`;
 
-const hms = A.filter(a => a.r && a.m > 15000 && a.m < 30000 && a.s/(a.m/1000) <= 450).sort((a,b) => a.d < b.d ? -1 : 1);
+const hms = A.filter(a => a.r && a.m > 15000 && a.m < 30000 && a.s/(a.m/1000) <= 480).sort((a,b) => a.d < b.d ? -1 : 1);
 const bestHM = hms.reduce((b,a) => a.s < b.s ? a : b, hms[0]);
 
 // KPI
@@ -1237,7 +1237,7 @@ const riegel = (sec, km) => sec * Math.pow(MARA/km, 1.06);
 (function raceTable() {
   const rows = A.filter(a => a.r).sort((a,b) => a.d < b.d ? -1 : 1).map(a => {
     const km = a.m/1000, pace = a.s/km;
-    const isWalk = pace > 450, isHM = km > 15;
+    const isWalk = pace > 480, isHM = km > 15;
     let pred = "—", verdict = "";
     if (!isWalk) {
       const p = riegel(a.s, km);
