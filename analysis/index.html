@@ -200,7 +200,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
 
   <section>
     <h2>半馬成績進步史</h2>
-    <p class="sub">2014 至今所有半程馬拉松完賽時間（越下方越快），含手動補登的官方成績；2016–2023 的空白就是那段長休。</p>
+    <p class="sub">2014 至今所有半程馬拉松完賽時間（越下方越快），含手動補登的官方成績；2016–2023 的長休以虛線壓縮表示。</p>
     <div class="card">
       <div class="chart-scroll" id="hm-chart"></div>
     </div>
@@ -1116,8 +1116,16 @@ $("#kpis").innerHTML = kpis.map(([v,u,l]) =>
   const W = 940, H = 320, ML = 56, MR = 24, MT = 24, MB = 40;
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", style: "min-width:720px; display:block;" });
   const iw = W - ML - MR, ih = H - MT - MB;
-  const t0 = dateOf(pts[0].d).getTime(), t1 = dateOf(pts[pts.length-1].d).getTime();
-  const x = d => ML + (dateOf(d).getTime() - t0) / (t1 - t0) * iw;
+  // X 軸：時間距離但長空白壓縮（單段間隔上限 14 個月）
+  const CAP = 14 * 30 * 86400e3;
+  const gaps = [];
+  for (let i = 1; i < pts.length; i++) {
+    const dt = dateOf(pts[i].d) - dateOf(pts[i-1].d);
+    gaps.push({ real: dt, used: Math.min(dt, CAP), broken: dt > CAP });
+  }
+  const totalX = gaps.reduce((t,g) => t + g.used, 0);
+  const xs = [ML];
+  gaps.forEach(g => xs.push(xs[xs.length-1] + g.used / totalX * iw));
   const sMin = Math.min(...pts.map(p => p.s)), sMax = Math.max(...pts.map(p => p.s));
   const yMin = Math.floor((sMin - 300) / 600) * 600, yMax = Math.ceil((sMax + 300) / 600) * 600;
   const y = s => MT + (s - yMin) / (yMax - yMin) * ih;
@@ -1126,22 +1134,26 @@ $("#kpis").innerHTML = kpis.map(([v,u,l]) =>
     el("line", { x1: ML, x2: W-MR, y1: y(g), y2: y(g), stroke: "var(--grid)", "stroke-width": 1 }, svg);
     el("text", { x: ML-8, y: y(g)+4, "text-anchor": "end", "font-size": 11, fill: "var(--ink-3)" }, svg).textContent = fmtDur(g);
   }
-  // 年份刻度
-  const y0 = dateOf(pts[0].d).getFullYear(), y1r = dateOf(pts[pts.length-1].d).getFullYear();
-  for (let yr = y0; yr <= y1r; yr += 2) {
-    const d = `${yr}-01-01`;
-    if (dateOf(d).getTime() >= t0 && dateOf(d).getTime() <= t1)
-      el("text", { x: x(d), y: H-8, "text-anchor": "middle", "font-size": 11, fill: "var(--ink-3)" }, svg).textContent = yr;
+  // 折線：長空白段用虛線＋標注實際年數
+  for (let i = 1; i < pts.length; i++) {
+    const seg = el("line", {
+      x1: xs[i-1], y1: y(pts[i-1].s), x2: xs[i], y2: y(pts[i].s),
+      stroke: "var(--s-run)", "stroke-width": 2, "stroke-linecap": "round"
+    }, svg);
+    if (gaps[i-1].broken) {
+      seg.setAttribute("stroke-dasharray", "5 5");
+      seg.setAttribute("opacity", "0.55");
+      const yrs = (gaps[i-1].real / 86400e3 / 365).toFixed(0);
+      el("text", { x: (xs[i-1]+xs[i])/2, y: (y(pts[i-1].s)+y(pts[i].s))/2 - 8, "text-anchor": "middle", "font-size": 11, fill: "var(--ink-3)", "font-style": "italic" }, svg).textContent = `⋯ 長休約 ${yrs} 年 ⋯`;
+    }
   }
-  const path = pts.map((p,i) => `${i?"L":"M"}${x(p.d).toFixed(1)},${y(p.s).toFixed(1)}`).join("");
-  el("path", { d: path, fill: "none", stroke: "var(--s-run)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
   pts.forEach((p, i) => {
     const isPB = p === bestHM;
-    const c = el("circle", { cx: x(p.d), cy: y(p.s), r: isPB ? 6.5 : 4.5, fill: "var(--s-run)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
-    if (isPB) el("circle", { cx: x(p.d), cy: y(p.s), r: 10, fill: "none", stroke: "var(--s-run)", "stroke-width": 1.5, opacity: 0.5 }, svg);
-    // 標籤上下交錯避免相撞（近年點很密）
+    const c = el("circle", { cx: xs[i], cy: y(p.s), r: isPB ? 6.5 : 4.5, fill: "var(--s-run)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
+    if (isPB) el("circle", { cx: xs[i], cy: y(p.s), r: 10, fill: "none", stroke: "var(--s-run)", "stroke-width": 1.5, opacity: 0.5 }, svg);
     const above = i % 2 === 0;
-    el("text", { x: x(p.d), y: above ? y(p.s)-12 : y(p.s)+22, "text-anchor": "middle", "font-size": 11, "font-weight": 600, fill: "var(--ink-2)" }, svg).textContent = fmtDur(p.s);
+    el("text", { x: xs[i], y: above ? y(p.s)-12 : y(p.s)+22, "text-anchor": "middle", "font-size": 11, "font-weight": 600, fill: "var(--ink-2)" }, svg).textContent = fmtDur(p.s);
+    el("text", { x: xs[i], y: i % 2 === 0 ? H-18 : H-6, "text-anchor": "middle", "font-size": 10, fill: "var(--ink-3)" }, svg).textContent = p.d.slice(2,7);
     c.addEventListener("mousemove", ev => showTip(ev, `<b>${p.n||"半馬"}</b><br>${p.d} · ${fmtKm(p.m)} km<br>${fmtDur(p.s)}（${fmtPace(p.s/(p.m/1000))}/km）`));
     c.addEventListener("mouseleave", hideTip);
   });
