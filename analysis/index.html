@@ -219,6 +219,14 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
   </section>
 
   <section>
+    <h2>月跑量</h2>
+    <p class="sub">每月跑步距離（2023-12 起）。滑鼠移上去看該月次數與長跑。</p>
+    <div class="card">
+      <div class="chart-scroll" id="monthly-chart"></div>
+    </div>
+  </section>
+
+  <section>
     <h2>配速趨勢</h2>
     <p class="sub">每次跑步的平均配速（越上方越快），點的大小對應距離；空心圈為比賽。已排除 &lt; 1 km 的片段與步行完賽（慢於 7:45/km）的活動。</p>
     <div class="card">
@@ -1217,6 +1225,63 @@ const wkeys = [];
         (dt.getMonth() === 0 ? dt.getFullYear() + "/" : "") + (dt.getMonth()+1) + "月";
   });
   $("#weekly-chart").appendChild(svg);
+})();
+
+// ---- 月跑量 ----
+(function monthlyChart() {
+  const byMonth = new Map();
+  runs.forEach(a => {
+    const k = a.d.slice(0, 7);
+    if (!byMonth.has(k)) byMonth.set(k, { km: 0, n: 0, longest: 0, races: [] });
+    const m = byMonth.get(k);
+    m.km += a.m / 1000; m.n++;
+    if (a.m > m.longest) m.longest = a.m;
+    if (a.r && a.m > 10000) m.races.push(a.n || "比賽");
+  });
+  // 補齊空月
+  const mkeys = [];
+  {
+    let [yy, mm] = dates[0].slice(0, 7).split("-").map(Number);
+    const last = dates[dates.length - 1].slice(0, 7);
+    while (true) {
+      const k = `${yy}-${String(mm).padStart(2, "0")}`;
+      mkeys.push(k);
+      if (!byMonth.has(k)) byMonth.set(k, { km: 0, n: 0, longest: 0, races: [] });
+      if (k === last) break;
+      mm++; if (mm > 12) { mm = 1; yy++; }
+    }
+  }
+  const W = 1000, H = 280, ML = 46, MR = 10, MT = 18, MB = 36;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", style: "min-width:760px; display:block;" });
+  const iw = W - ML - MR, ih = H - MT - MB;
+  const maxKm = Math.ceil(Math.max(...mkeys.map(k => byMonth.get(k).km)) / 20) * 20;
+  const y = km => MT + ih - km / maxKm * ih;
+  const bw = iw / mkeys.length;
+  for (let g = 0; g <= maxKm; g += 20) {
+    el("line", { x1: ML, x2: W - MR, y1: y(g), y2: y(g), stroke: "var(--grid)", "stroke-width": 1 }, svg);
+    el("text", { x: ML - 8, y: y(g) + 4, "text-anchor": "end", "font-size": 11, fill: "var(--ink-3)" }, svg).textContent = g;
+  }
+  mkeys.forEach((k, i) => {
+    const m = byMonth.get(k);
+    const x = ML + i * bw + bw * 0.16, wdt = bw * 0.68;
+    const h = Math.max(0, MT + ih - y(m.km));
+    if (m.km > 0) {
+      const r = Math.min(4, h);
+      const bar = el("path", {
+        d: `M${x.toFixed(1)},${MT + ih} v${-(h - r).toFixed(1)} q0,${-r} ${r},${-r} h${(wdt - 2 * r).toFixed(1)} q${r},0 ${r},${r} v${(h - r).toFixed(1)} z`,
+        fill: "var(--s-run)"
+      }, svg);
+      const label = `<b>${k}</b><br>${m.km.toFixed(1)} km · ${m.n} 次<br>最長 ${fmtKm(m.longest)} km` +
+        (m.races.length ? `<br>🏁 ${m.races.join("、")}` : "");
+      bar.addEventListener("mousemove", ev => showTip(ev, label));
+      bar.addEventListener("mouseleave", hideTip);
+      el("text", { x: x + wdt / 2, y: y(m.km) - 6, "text-anchor": "middle", "font-size": 10, fill: "var(--ink-3)" }, svg).textContent = Math.round(m.km);
+    }
+    const [yy, mm] = k.split("-");
+    el("text", { x: x + wdt / 2, y: H - 8, "text-anchor": "middle", "font-size": 10.5, fill: "var(--ink-3)" }, svg).textContent =
+      mm === "01" || i === 0 ? `${yy.slice(2)}/${+mm}` : `${+mm}`;
+  });
+  $("#monthly-chart").appendChild(svg);
 })();
 
 // ---- 配速趨勢 ----
