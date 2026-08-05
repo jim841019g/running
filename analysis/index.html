@@ -230,7 +230,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
 
   <section>
     <h2>比賽與測驗</h2>
-    <p class="sub">Riegel 公式（指數 1.06）由比賽成績外推全馬預測；距離越短外推誤差越大。</p>
+    <p class="sub">Riegel 公式（指數 1.06）由比賽成績外推全馬預測；距離越短外推誤差越大。標注「官方成績」者為 Strava 之外手動補登，以標準距計。</p>
     <div class="card table-scroll" style="padding:6px 0;">
       <table id="race-table">
         <thead><tr>
@@ -932,7 +932,7 @@ const A = [
 {d:"2024-09-28",t:"Ride",m:1123.3,s:286},
 {d:"2024-09-27",t:"Run",m:7221.7,s:3010,c:80.9},
 {d:"2024-09-25",t:"Run",m:2514.2,s:878,c:85.2},
-{d:"2024-09-22",t:"Run",m:10048.4,s:3795,c:84.9},
+{d:"2024-09-22",t:"Run",m:10048.4,s:3795,c:84.9,n:"2024 統一發票路跑 10K（官方 1:03:09）",r:1},
 {d:"2024-09-18",t:"Ride",m:2041.5,s:569},
 {d:"2024-09-18",t:"Run",m:3109.3,s:1107,c:86.4},
 {d:"2024-09-18",t:"Ride",m:1188.2,s:300},
@@ -1041,7 +1041,13 @@ const A = [
 {d:"2023-12-19",t:"Run",m:4375.4,s:1755,c:81.7},
 {d:"2023-12-17",t:"Run",m:4323.7,s:1860,c:83.5},
 {d:"2014-11-22",t:"Run",m:20194.7,s:7147,n:"2014 石門水庫半馬",r:1},
-{d:"2014-03-16",t:"Run",m:21047.4,s:7388,n:"2014 國道半馬",r:1}
+{d:"2014-03-16",t:"Run",m:21047.4,s:7388,n:"2014 國道半馬",r:1},
+// —— 以下為手動補登（不在 Strava，官方成績；距離用標準距）——
+{d:"2023-03-05",t:"Run",m:21097.5,s:9246,n:"2023 台南古都半馬（復出賽，官方成績）",r:1},
+{d:"2016-03-20",t:"Run",m:21097.5,s:8786,n:"2016 國道半馬（官方成績）",r:1},
+{d:"2015-06-06",t:"Run",m:21097.5,s:9901,n:"2015 奧林匹克半馬（官方成績）",r:1},
+{d:"2015-02-08",t:"Run",m:42195,s:18844,n:"2015 渣打全馬（生涯首全馬・現任全馬 PB，官方成績）",r:1},
+{d:"2014-02-23",t:"Run",m:21097.5,s:7948,n:"2014 渣打半馬（生涯首半馬，官方成績）",r:1}
 ];
 
 // ---- 工具 ----
@@ -1083,10 +1089,10 @@ const goalPace = GOAL_SEC / MARA;
 $("#goal-pace").textContent = fmtPace(goalPace);
 
 const dates = modern.map(a => a.d).sort();
-$("#meta-range").textContent = `${dates[0]} ～ ${dates[dates.length-1]}（另含 2014 年 2 筆歷史半馬）`;
+$("#meta-range").textContent = `${dates[0]} ～ ${dates[dates.length-1]}（另含 2014–2023 手動補登的歷史比賽）`;
 $("#meta-count").textContent = `共 ${A.length} 筆活動 · 體重 63 kg`;
 
-const hms = A.filter(a => a.r && a.m > 15000 && a.s/(a.m/1000) <= 450).sort((a,b) => a.d < b.d ? -1 : 1);
+const hms = A.filter(a => a.r && a.m > 15000 && a.m < 30000 && a.s/(a.m/1000) <= 450).sort((a,b) => a.d < b.d ? -1 : 1);
 const bestHM = hms.reduce((b,a) => a.s < b.s ? a : b, hms[0]);
 
 // KPI
@@ -1307,7 +1313,7 @@ const riegel = (sec, km) => sec * Math.pow(MARA/km, 1.06);
   const longestSinceMay = runs.filter(a => a.d >= "2026-05-01" && !a.r).reduce((b,a) => a.m > b.m ? a : b, {m:0});
 
   const items = [
-    ["pos", "兩年半的進步軌跡", `半馬從 ${first.d.slice(0,7)} 的 ${fmtDur(first.s)} 一路推進到 ${bestHM.d.slice(0,7)} 渣打的 ${fmtDur(bestHM.s)}，兩年進步 ${gain.toFixed(0)} 分鐘；步頻也從 2024 上半年的平均 ${Math.round(cad24)} spm 提升到 2026 年的 ${Math.round(cad26)} spm。順帶一提，2014 年就跑過國道半馬（2:03:08）——這是一個十年後回歸還變強的故事。`],
+    ["pos", "十二年的進步軌跡", `生涯首半馬是 2014 渣打的 2:12:28，PB 是 2026 渣打的 ${fmtDur(bestHM.s)}——十二年快了 33 分鐘。中間的故事很完整：2015 首全馬 5:14:04（至今仍是你的全馬 PB，12 月就是刷新它的日子——目標 3:40 等於比十一年前的自己快 1 小時 34 分）、2016 之後長休、2023 台南古都 2:34 復出探路、2023-12 重啟訓練後 ${first.d.slice(0,7)} 跑回 ${fmtDur(first.s)}，然後兩年推進 ${gain.toFixed(0)} 分鐘；步頻也從 2024 上半年的 ${Math.round(cad24)} spm 提升到 2026 年的 ${Math.round(cad26)} spm。`],
     ["neu", "體能基準：一月是巔峰，現在在回升路上", `以 1/11 渣打 ${fmtDur(bestHM.s)} 外推，全馬約 ${fmtDur(Math.round(pBest))} —— 一月的體能跑 3:40 綽綽有餘。但 3/8 國道掉到 ${fmtDur(hmGd.s)}（外推 ${fmtDur(Math.round(pGd))}），4/26 國家地理 ${fmtDur(hmNg.s)}（外推 ${fmtDur(Math.round(pNg))}），加上 7/1 自述「胖了五公斤」，目前體能明顯低於年初。好消息是：你證明過自己到得了那裡。`],
     ["neg", "跑量是最大缺口", `渣打備賽期（2025-11-17 起 8 週）週均 ${scPrep.toFixed(1)} km，近四週（7/8–8/4）只有 ${recent4.toFixed(1)} km；六月只跑了 ${juneRuns.length} 次、共 ${(juneRuns.reduce((k,a)=>k+a.m,0)/1000).toFixed(1)} km。全馬 3:40 的常見準備量是週 45–60 km，距 12/19 目標約 19 週，足夠重建，但要從現在開始每週穩定加量（+10% 以內）。`],
     ["neg", "長距離要補（強度先別急）", `一二月能吃 6–8km @ 4:30 的 tempo；8/4 的 Threshold 15min @ 4:45「降速求生存」——但別忘了現在是夏天，配速掉是正常的（詳見「七月以來」分頁的同期對照）。真正的缺口在長距離：5 月以來最長訓練跑僅 ${fmtKm(longestSinceMay.m)} km，全馬備賽需把 long run 逐步拉回 28–32 km。夏天用時間與心率控課，等 10 月轉涼再追配速。`],
@@ -1730,6 +1736,7 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
   $("#plan-countdown").textContent = `以 12/19–20 的週末為目標日往回排，現在起約 ${weeksLeft} 週。`;
   $("#plan-anchors").innerHTML =
     chip("目標", "全馬 3:40") + chip("目標配速", "5:13/km") +
+    chip("現任全馬 PB", "5:14:04（2015）") +
     chip("期中考", "11/22 南山半馬 1:40") +
     chip("出國", "10/9–10/26") +
     chip("已驗證模型", "渣打 PB 週均 40k") + chip("最大缺口", "long run／腿端");
