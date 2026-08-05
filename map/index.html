@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KoChun 路跑足跡地圖</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+  #map { height: 100%; }
+  .panel {
+    position: absolute; top: 12px; right: 12px; z-index: 1000;
+    background: rgba(255,255,255,0.95); border-radius: 10px; padding: 12px 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25); font-size: 13px; max-width: 240px;
+    max-height: calc(100% - 48px); overflow-y: auto;
+  }
+  .panel h1 { font-size: 15px; margin: 0 0 8px; }
+  .panel label { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
+  .sw { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+  .regions { margin-top: 10px; border-top: 1px solid #ddd; padding-top: 8px; }
+  .regions button {
+    display: block; width: 100%; text-align: left; margin: 2px 0; padding: 4px 8px;
+    border: none; background: none; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12.5px;
+  }
+  .regions button:hover { background: #eef2f8; }
+  .regions button b { color: #888; font-weight: 500; }
+  .stats { color: #666; margin-top: 8px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <h1>🏃 KoChun 路跑足跡</h1>
+  <label><input type="checkbox" data-t="Run" checked><span class="sw" style="background:#1d6ef0"></span>跑步</label>
+  <label><input type="checkbox" data-t="Ride" checked><span class="sw" style="background:#e2571b"></span>騎乘</label>
+  <label><input type="checkbox" data-t="Walk" checked><span class="sw" style="background:#0c8f5b"></span>步行／健行</label>
+  <div class="regions" id="regions"></div>
+  <div class="stats" id="stats"></div>
+</div>
+<script src="routes.js"></script>
+<script>
+const decode = p => {
+  const pts = []; let i = 0, lat = 0, lng = 0;
+  while (i < p.length) {
+    for (let w = 0; w < 2; w++) {
+      let shift = 0, result = 0, b;
+      do { b = p.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      const d = (result & 1) ? ~(result >> 1) : (result >> 1);
+      if (w === 0) lat += d; else lng += d;
+    }
+    pts.push([lat / 1e5, lng / 1e5]);
+  }
+  return pts;
+};
+
+const map = L.map("map", { zoomControl: true });
+L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/">CARTO</a>',
+  maxZoom: 20
+}).addTo(map);
+
+const KNOWN = [
+  [25.04, 121.54, "台北（主場）"],
+  [25.0296, 121.5357, "大安森林公園"],
+  [24.81, 121.24, "桃園・石門水庫"],
+  [23.46, 120.44, "嘉義"],
+  [51.07, -115.41, "加拿大・Banff／Canmore"],
+  [51.42, -116.21, "露易絲湖・夢蓮湖"],
+  [49.28, -123.13, "溫哥華"],
+  [62.46, -114.37, "黃刀鎮"],
+  [47.66, -122.33, "西雅圖"],
+  [-37.85, 144.98, "墨爾本"],
+  [-38.76, 143.55, "大洋路"],
+  [-27.47, 153.02, "布里斯本"],
+  [37.53, 126.93, "首爾"],
+  [37.58, 128.33, "平昌・滑雪場"],
+  [46.41, 11.58, "多洛米蒂"],
+  [43.71, 7.29, "尼斯・摩納哥"],
+  [44.84, -0.57, "波爾多"],
+  [34.06, -118.13, "洛杉磯"],
+  [36.88, -111.5, "佩吉・羚羊谷"],
+  [36.06, -112.11, "大峽谷"],
+  [36.02, -114.75, "胡佛水壩"],
+  [-11.64, 166.96, "Zwift Watopia（虛擬）"]
+];
+const colorOf = t => t === "Ride" ? "#e2571b" : (t === "Walk" || t === "Hike") ? "#0c8f5b" : "#1d6ef0";
+const groupOf = t => (t === "Walk" || t === "Hike") ? "Walk" : (t === "Ride" ? "Ride" : "Run");
+
+const layers = { Run: L.layerGroup().addTo(map), Ride: L.layerGroup().addTo(map), Walk: L.layerGroup().addTo(map) };
+let totalKm = 0, count = 0;
+const regionCount = new Map();
+ROUTES.forEach(r => {
+  const pts = decode(r.p);
+  if (pts.length < 2) return;
+  const line = L.polyline(pts, { color: colorOf(r.t), weight: 2.5, opacity: 0.55 });
+  line.bindPopup(`${r.d} · ${r.t} · ${(r.m / 1000).toFixed(1)} km`);
+  line.on("mouseover", () => line.setStyle({ weight: 5, opacity: 1 }));
+  line.on("mouseout", () => line.setStyle({ weight: 2.5, opacity: 0.55 }));
+  layers[groupOf(r.t)].addLayer(line);
+  totalKm += r.m / 1000; count++;
+  const [la, lo] = pts[0];
+  let best = null, bd = 0.8;
+  KNOWN.forEach(k => {
+    const d = Math.max(Math.abs(k[0] - la), Math.abs(k[1] - lo));
+    if (d < bd && k[2] !== "大安森林公園" && k[2] !== "台北（主場）") { bd = d; best = k[2]; }
+    else if (d < bd && k[2] === "台北（主場）") { bd = d; best = k[2]; }
+  });
+  if (best) regionCount.set(best, (regionCount.get(best) || 0) + 1);
+});
+
+document.querySelectorAll(".panel input[type=checkbox]").forEach(cb => {
+  cb.addEventListener("change", () => {
+    const g = layers[cb.dataset.t];
+    if (cb.checked) map.addLayer(g); else map.removeLayer(g);
+  });
+});
+
+const regionsBox = document.getElementById("regions");
+const jumpZoom = { "台北（主場）": 13, "大安森林公園": 15 };
+KNOWN.forEach(([la, lo, name]) => {
+  const n = regionCount.get(name);
+  if (!n && name !== "大安森林公園") return;
+  const b = document.createElement("button");
+  b.innerHTML = `${name} ${n ? `<b>（${n}）</b>` : ""}`;
+  b.addEventListener("click", () => map.flyTo([la, lo], jumpZoom[name] || 12));
+  regionsBox.appendChild(b);
+});
+document.getElementById("stats").textContent = `${count} 條路線 · ${Math.round(totalKm)} km · 資料至 2026-08-04`;
+
+map.setView([25.0296, 121.5357], 14); // 開場：大安森林公園
+</script>
+</body>
+</html>
