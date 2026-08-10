@@ -310,7 +310,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
     </section>
     <section>
       <h2>全部週次一覽</h2>
-      <p class="sub">週一起算，新到舊；質量課 = Relative Effort ≥ 60 的訓練。點列可跳到該週 recap。</p>
+      <p class="sub">週一起算，新到舊；質量課 = 課名標示質量課，或強度密度（RE÷分鐘）達 1.9 以上。點列可跳到該週 recap。</p>
       <div class="card table-scroll" style="padding:6px 0; max-height:60vh; overflow-y:auto;">
         <table id="weekly-table">
           <thead><tr>
@@ -946,12 +946,18 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
     byWeek.get(k).push(a);
   });
   const keys = [...byWeek.keys()].sort().reverse();
+  const QUAL_RE = /Tempo|Threshold|Interval|stride|變速|間歇|Test|test|HIIT|漸進/;
+  // 質量課＝強度高，不是「累得多」。Relative Effort 會隨時間累積
+  // （51min easy 的 RE 比 27min threshold 還高），所以改用「RE 密度」＝ RE ÷ 分鐘。
+  const reDens = a => (a.e || 0) / Math.max(a.s / 60, 1);
+  const isQual = a => !a.r && (QUAL_RE.test(a.n || "") || reDens(a) >= 1.9);
+  const classify = a => a.r ? "🏁 比賽" : a.m >= 12000 ? "長距離" : isQual(a) ? "質量" : (a.s/(a.m/1000) > 385 ? "恢復" : "Easy");
   const statOf = k => {
     const g = byWeek.get(k) || [];
     const km = g.reduce((s,a) => s + a.m, 0)/1000;
     const good = g.filter(a => a.m >= 1000 && a.s/(a.m/1000) <= 465);
     const pace = good.length ? good.reduce((s,a) => s + a.s, 0)/(good.reduce((s,a) => s + a.m, 0)/1000) : 0;
-    return { g, km, pace, quality: g.filter(a => (a.e||0) >= 60 && !a.r).length, races: g.filter(a => a.r), eff: g.reduce((t,a) => t + (a.e||0), 0) };
+    return { g, km, pace, quality: g.filter(a => isQual(a)).length, races: g.filter(a => a.r), eff: g.reduce((t,a) => t + (a.e||0), 0) };
   };
   sel.innerHTML = keys.map(k => {
     const s = statOf(k);
@@ -965,9 +971,6 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
     const longest = s.g.reduce((b,a) => a.m > b.m ? a : b, s.g[0]);
     const dKm = prev ? s.km - prev.km : 0;
     const days = new Set(s.g.map(a => a.d)).size;
-    const QUAL_RE = /Tempo|Threshold|Interval|stride|變速|間歇|Test|test|HIIT|漸進/;
-    const isQual = a => !a.r && ((a.e||0) >= 60 || QUAL_RE.test(a.n || ""));
-    const classify = a => a.r ? "🏁 比賽" : a.m >= 12000 ? "長距離" : isQual(a) ? "質量" : (a.s/(a.m/1000) > 385 ? "恢復" : "Easy");
     const paceOf = a => a.s/(a.m/1000);
 
     // 近 8 週 easy 基線（不含本週、只比 easy 對 easy）
