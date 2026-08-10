@@ -957,7 +957,10 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
     const km = g.reduce((s,a) => s + a.m, 0)/1000;
     const good = g.filter(a => a.m >= 1000 && a.s/(a.m/1000) <= 465);
     const pace = good.length ? good.reduce((s,a) => s + a.s, 0)/(good.reduce((s,a) => s + a.m, 0)/1000) : 0;
-    return { g, km, pace, quality: g.filter(a => isQual(a)).length, races: g.filter(a => a.r), eff: g.reduce((t,a) => t + (a.e||0), 0) };
+    const qs = g.filter(a => isQual(a));
+    const tSec = g.reduce((t,a) => t + a.s, 0);
+    return { g, km, pace, quality: qs.length, races: g.filter(a => a.r), eff: g.reduce((t,a) => t + (a.e||0), 0),
+             qPct: tSec ? qs.reduce((t,a) => t + a.s, 0) / tSec * 100 : 0, sec: tSec };
   };
   sel.innerHTML = keys.map(k => {
     const s = statOf(k);
@@ -1056,6 +1059,20 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
         else if (r <= 0.5 && !s.races.length && avgEff > 50) sig.push(`訓練負荷只有前四週平均的 ${(r*100).toFixed(0)}%——身體在吸收前面的訓練，別急著補課`);
         else sig.push(`訓練負荷（RE ${s.eff}）在前四週平均（${Math.round(avgEff)}）的正常波動範圍內`);
       }
+      // 80/20 強度平衡（本週 vs 近四週滾動）
+      if (s.sec > 900) {
+        const roll = keys.slice(idx, idx + 4).map(statOf).filter(x => x.sec > 0);
+        const rSec = roll.reduce((t, x) => t + x.sec, 0);
+        const rQ = rSec ? roll.reduce((t, x) => t + x.qPct / 100 * x.sec, 0) / rSec * 100 : 0;
+        let b = `強度平衡：本週質量課占訓練時間 <b>${s.qPct.toFixed(0)}%</b>（${s.quality}／${s.g.length} 堂）`;
+        if (roll.length >= 2) b += `，近四週滾動 ${rQ.toFixed(0)}%`;
+        const ref = roll.length >= 2 ? rQ : s.qPct;
+        if (ref < 8) b += "。低於 80/20 原則的建議下限（15–25%）——打底期這樣沒問題，但進入專項期後質量課要拉上來。";
+        else if (ref <= 25) b += "。落在 80/20 原則的健康區間（15–25%），強度配置合理。";
+        else if (ref <= 35) b += "。略高於 80/20 建議上限，easy 才是主食；若不是刻意的強度週，下週把質量課降到 1–2 堂。";
+        else b += "。<b>明顯偏高</b>——超過三分之一的訓練時間在高強度，是過度訓練與傷病的典型前兆，下週務必以 easy 為主。";
+        sig.push(b);
+      }
       if (sig.length) paras.push(`狀態訊號：${sig.join("；")}。`);
     }
 
@@ -1077,7 +1094,8 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
         ${chip("次數", s.g.length)}
         ${chip("最長", longest ? fmtKm(longest.m) + " km" : "—")}
         ${chip("平均配速", s.pace ? fmtPace(s.pace) : "—")}
-        ${chip("質量課", s.quality)}
+        ${chip("質量課", s.quality + " 堂")}
+        ${chip("質量占比", s.sec ? s.qPct.toFixed(0) + "%" : "—")}
         ${chip("vs 前週", (dKm >= 0 ? "+" : "") + dKm.toFixed(1) + " km")}
       </div>
       <table style="margin-bottom:12px;"><tbody>
