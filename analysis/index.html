@@ -310,7 +310,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
     </section>
     <section>
       <h2>全部週次一覽</h2>
-      <p class="sub">週一起算，新到舊；質量課 = 課名標示質量課，或強度密度（RE÷分鐘）達 1.9 以上。點列可跳到該週 recap。</p>
+      <p class="sub">週一起算，新到舊；質量課 = 課名標示質量課，或強度密度（RE÷分鐘）達 1.9 以上；占比以裝置分段推得的「主段時間」計（無分段資料者以全場時間計，會標示為估計）。點列可跳到該週 recap。</p>
       <div class="card table-scroll" style="padding:6px 0; max-height:60vh; overflow-y:auto;">
         <table id="weekly-table">
           <thead><tr>
@@ -442,6 +442,16 @@ const showTip = (ev, html) => {
   tip.style.left = x + "px"; tip.style.top = (ev.clientY + 14) + "px";
 };
 const hideTip = () => tip.style.display = "none";
+// ---- 質量課判定（全域共用）----
+// 強度看的是「核心訓練段」：a.q = 由裝置 laps 推得的主段秒數（有才用，沒有則退回全場時間）。
+const QUAL_RE = /Tempo|Threshold|Interval|stride|變速|間歇|Test|test|HIIT|漸進/;
+const reDens = a => (a.e || 0) / Math.max(a.s / 60, 1);
+// 判定優先序：課名明示 > 裝置分段推得的主段（最可靠）> RE 密度（無分段時的備援；
+// 熱天 easy 課心率會飆高，單看 RE 密度會誤判，所以有 q 就以 q 為準）。
+const isQual = a => !a.r && (QUAL_RE.test(a.n || "") || (a.q != null ? a.q > 0 : reDens(a) >= 1.9));
+const workSec = a => !isQual(a) ? 0 : (a.q != null ? a.q : a.s);   // 主段秒數
+const classify = a => a.r ? "🏁 比賽" : a.m >= 12000 ? "長距離" : isQual(a) ? "質量" : (a.s/(a.m/1000) > 385 ? "恢復" : "Easy");
+
 const typeLabel = { Run:"跑步", Ride:"騎乘", Walk:"步行", Hike:"健行", WeightTraining:"重訓", Workout:"訓練", Crossfit:"Crossfit", Snowboard:"單板滑雪" };
 
 // ---- 基礎統計（現代期間：2023-12 起）----
@@ -866,7 +876,7 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     const good = g.filter(a => a.m >= 1000 && a.s/(a.m/1000) <= 465);
     const pace = good.length ? good.reduce((s,a) => s + a.s, 0) / (good.reduce((s,a) => s + a.m, 0)/1000) : 0;
     const longest = g.reduce((b,a) => a.m > b.m ? a : b, g[0]);
-    const quality = g.filter(a => (a.e||0) >= 60 && !a.r).length;
+    const quality = g.filter(a => isQual(a)).length;
     const races = g.filter(a => a.r).map(a => a.n || "比賽");
     const notes = [];
     if (races.length) notes.push("🏁 " + races.join("、"));
@@ -946,12 +956,6 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
     byWeek.get(k).push(a);
   });
   const keys = [...byWeek.keys()].sort().reverse();
-  const QUAL_RE = /Tempo|Threshold|Interval|stride|變速|間歇|Test|test|HIIT|漸進/;
-  // 質量課＝強度高，不是「累得多」。Relative Effort 會隨時間累積
-  // （51min easy 的 RE 比 27min threshold 還高），所以改用「RE 密度」＝ RE ÷ 分鐘。
-  const reDens = a => (a.e || 0) / Math.max(a.s / 60, 1);
-  const isQual = a => !a.r && (QUAL_RE.test(a.n || "") || reDens(a) >= 1.9);
-  const classify = a => a.r ? "🏁 比賽" : a.m >= 12000 ? "長距離" : isQual(a) ? "質量" : (a.s/(a.m/1000) > 385 ? "恢復" : "Easy");
   const statOf = k => {
     const g = byWeek.get(k) || [];
     const km = g.reduce((s,a) => s + a.m, 0)/1000;
@@ -960,7 +964,8 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
     const qs = g.filter(a => isQual(a));
     const tSec = g.reduce((t,a) => t + a.s, 0);
     return { g, km, pace, quality: qs.length, races: g.filter(a => a.r), eff: g.reduce((t,a) => t + (a.e||0), 0),
-             qPct: tSec ? qs.reduce((t,a) => t + a.s, 0) / tSec * 100 : 0, sec: tSec };
+             qPct: tSec ? g.reduce((t,a) => t + workSec(a), 0) / tSec * 100 : 0, sec: tSec,
+             qEst: qs.some(a => a.q == null) };
   };
   sel.innerHTML = keys.map(k => {
     const s = statOf(k);
@@ -1066,6 +1071,7 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
         const rQ = rSec ? roll.reduce((t, x) => t + x.qPct / 100 * x.sec, 0) / rSec * 100 : 0;
         let b = `強度平衡：本週質量課占訓練時間 <b>${s.qPct.toFixed(0)}%</b>（${s.quality}／${s.g.length} 堂）`;
         if (roll.length >= 2) b += `，近四週滾動 ${rQ.toFixed(0)}%`;
+        if (s.qEst) b += "（標 * 者含無分段資料的課，以全場時間估計，實際主段占比會更低）";
         const ref = roll.length >= 2 ? rQ : s.qPct;
         if (ref < 8) b += "。低於 80/20 原則的建議下限（15–25%）——打底期這樣沒問題，但進入專項期後質量課要拉上來。";
         else if (ref <= 25) b += "。落在 80/20 原則的健康區間（15–25%），強度配置合理。";
@@ -1095,7 +1101,7 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
         ${chip("最長", longest ? fmtKm(longest.m) + " km" : "—")}
         ${chip("平均配速", s.pace ? fmtPace(s.pace) : "—")}
         ${chip("質量課", s.quality + " 堂")}
-        ${chip("質量占比", s.sec ? s.qPct.toFixed(0) + "%" : "—")}
+        ${chip("質量占比", s.sec ? s.qPct.toFixed(0) + "%" + (s.qEst ? "*" : "") : "—")}
         ${chip("vs 前週", (dKm >= 0 ? "+" : "") + dKm.toFixed(1) + " km")}
       </div>
       <table style="margin-bottom:12px;"><tbody>
