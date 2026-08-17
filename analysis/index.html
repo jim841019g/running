@@ -293,6 +293,18 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
       </div>
     </section>
 
+
+    <section>
+      <h2>訓練筆記：主觀 vs 客觀</h2>
+      <p class="sub">你寫在 Strava 上的每則筆記，跟當次的心率、配速、體感溫度對照。體感準不準，數據會說話。</p>
+      <div class="card table-scroll" style="padding:6px 0;">
+        <table id="notes-table">
+          <thead><tr><th>日期</th><th>課</th><th>你的筆記</th><th class="num">配速</th><th class="num">心率</th><th class="num">體感</th><th>數據怎麼說</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="insights" id="notes-insights" style="margin-top:12px;"></div>
+    </section>
     <section>
       <h2>夏訓觀察</h2>
       <div class="insights" id="summer-insights"></div>
@@ -981,6 +993,92 @@ function renderSplits(laps, unitLabel) {
   }).join("") + `</div><div style="font-size:11.5px; color:var(--ink-3); margin-top:8px;">左欄為第幾${unitLabel || "公里"}；bar 越長越快；♥ 為該段平均心率。</div>`;
 }
 const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div class="y">${l}</div><div class="num" style="font-size:17px; font-weight:650; padding-top:2px;">${v}</div></div>`;
+
+
+// ---- 訓練筆記：主觀 vs 客觀 ----
+(function notesTab() {
+  const withNote = A.filter(a => a.t === "Run" && a.note).sort((x, y) => x.d < y.d ? 1 : -1);
+  if (!withNote.length) return;
+
+  // easy 課的心率基線（同類型比同類型才公平）
+  const easyRuns = A.filter(a => a.t === "Run" && !a.r && !isQual(a) && a.hr && a.d >= "2026-07-01");
+  const hrBase = easyRuns.length ? easyRuns.reduce((s, a) => s + a.hr, 0) / easyRuns.length : null;
+  const paceOf = a => a.s / (a.m / 1000);
+  const paceBase = easyRuns.length
+    ? easyRuns.reduce((s, a) => s + a.s, 0) / (easyRuns.reduce((s, a) => s + a.m, 0) / 1000) : null;
+
+  const verdict = a => {
+    const bits = [];
+    const q = isQual(a);
+    if (a.hr && hrBase && !q) {
+      const d = a.hr - hrBase;
+      if (d >= 4) bits.push(`<b>同配速心率高 ${d.toFixed(0)} 下</b>——疲勞在數據上的樣子`);
+      else if (d <= -4) bits.push(`心率比基線低 ${(-d).toFixed(0)} 下，狀態輕鬆`);
+    }
+    if (a.dec != null) {
+      if (a.dec <= 6) bits.push(`脫鉤僅 ${a.dec}%，有氧穩定`);
+      else if (a.dec >= 12) bits.push(`脫鉤 ${a.dec}%，後段效率掉得多`);
+    }
+    if (paceBase && !q) {
+      const dp = paceOf(a) - paceBase;
+      if (Math.abs(dp) <= 8) bits.push("配速與平常無異");
+      else if (dp > 8) bits.push(`比平常慢 ${dp.toFixed(0)} 秒/km`);
+      else bits.push(`比平常快 ${(-dp).toFixed(0)} 秒/km`);
+    }
+    if (a.wx && a.wx >= 32) bits.push(`體感 ${a.wx}°C，高熱負荷`);
+    return bits.length ? bits.join("；") + "。" : "—";
+  };
+
+  $("#notes-table tbody").innerHTML = withNote.map(a => `<tr>
+    <td class="num" style="white-space:nowrap">${a.d}</td>
+    <td style="white-space:nowrap">${a.n || "Run"}</td>
+    <td style="font-size:13.5px">${a.note}</td>
+    <td class="num">${fmtPace(paceOf(a))}</td>
+    <td class="num">${a.hr ? a.hr.toFixed(0) : "—"}</td>
+    <td class="num">${a.wx != null ? a.wx + "°" : "—"}</td>
+    <td style="font-size:12.5px;color:var(--ink-2)">${verdict(a)}</td></tr>`).join("");
+
+  // 自動歸納
+  const ins = [];
+  const hot = withNote.filter(a => /熱|悶|濕/.test(a.note));
+  const tired = withNote.filter(a => /累|痛|抽筋|不夠|跑不完|撐不|慘/.test(a.note));
+  const good = withNote.filter(a => /不錯|順|輕鬆|舒服|爽/.test(a.note));
+
+  if (paceBase) {
+    const easyNoted = withNote.filter(a => !isQual(a) && !a.r);
+    if (easyNoted.length >= 3) {
+      const ps = easyNoted.map(paceOf);
+      const spread = Math.max(...ps) - Math.min(...ps);
+      ins.push(["pos", "配速紀律",
+        `有筆記的 easy 課共 ${easyNoted.length} 次，配速全距僅 <b>${spread.toFixed(0)} 秒/km</b>（${fmtPace(Math.min(...ps))}–${fmtPace(Math.max(...ps))}）。
+         這些日子的筆記涵蓋背痛、空腹、無聊、累個半死——<b>身體狀況天差地遠，配速紋風不動</b>，代表 easy pace 已經內化成自動節奏。`]);
+    }
+  }
+  if (tired.length && hrBase) {
+    const withHr = tired.filter(a => a.hr && !isQual(a));
+    if (withHr.length) {
+      const avg = withHr.reduce((s, a) => s + a.hr, 0) / withHr.length;
+      const d = avg - hrBase;
+      ins.push([d >= 2 ? "neg" : "neu", "疲勞訊號的驗證",
+        `寫下疲勞／不適的 easy 課有 ${withHr.length} 次，平均心率 ${avg.toFixed(0)}，比 easy 基線 ${hrBase.toFixed(0)} ${d >= 0 ? "高" : "低"} ${Math.abs(d).toFixed(1)} 下。
+         ${d >= 2 ? "<b>你的體感抓得到儀器才看得出的東西</b>——疲勞不是讓你跑慢，是讓同樣的速度變貴。" : "主觀不適沒有反映在心率上，代表這類感覺不必然要縮課表。"}`]);
+    }
+  }
+  if (good.length) {
+    const g = good[0];
+    ins.push(["pos", "自評準確度",
+      `${g.d}「${g.note}」——當次${g.dec != null ? `心率脫鉤 ${g.dec}%` : ""}${g.hr ? `、心率 ${g.hr.toFixed(0)}` : ""}，
+       是同期表現最好的幾次之一。你的正面自評同樣可信。`]);
+  }
+  if (hot.length) {
+    const temps = withNote.filter(a => a.wx != null).map(a => a.wx);
+    if (temps.length) ins.push(["neu", "熱的抱怨其實低估了",
+      `提到熱／濕的筆記有 ${hot.length} 則，但這段期間<b>每一次</b>跑步的體感都在 ${Math.min(...temps)}–${Math.max(...temps)}°C。
+       也就是說後來你不再抱怨，不是天氣變好，是你習慣了。`]);
+  }
+  $("#notes-insights").innerHTML = ins.map(([c, h, b]) =>
+    `<div class="insight"><h3><span class="tag ${c}">${c === "pos" ? "優勢" : c === "neg" ? "訊號" : "觀察"}</span>${h}</h3><p>${b}</p></div>`).join("");
+})();
 
 // ---- Tab 3：每週 Recap ----
 (function weekRecap() {
