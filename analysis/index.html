@@ -1145,7 +1145,7 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
       <table style="margin-bottom:12px;"><tbody>
       ${s.g.sort((a,b) => a.d < b.d ? -1 : 1).map(a => `<tr>
         <td class="num" style="white-space:nowrap;">${a.d.slice(5)}</td>
-        <td>${a.n || "Easy Run"}</td>
+        <td>${a.n || "Easy Run"}${a.parts ? ` <span class="pill" style="font-size:10.5px">${a.parts} 段合併</span>` : ""}</td>
         <td><span class="pill">${classify(a)}</span></td>
         <td class="num">${fmtKm(a.m)} km</td>
         <td class="num">${fmtPace(a.s/(a.m/1000))}/km</td>
