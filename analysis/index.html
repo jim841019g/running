@@ -190,6 +190,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
     <button class="tab-btn active" data-tab="overview" role="tab">總覽</button>
     <button class="tab-btn" data-tab="summer" role="tab">七月以來</button>
     <button class="tab-btn" data-tab="weekly" role="tab">每週明細</button>
+    <button class="tab-btn" data-tab="recovery" role="tab">恢復</button>
     <button class="tab-btn" data-tab="races" role="tab">比賽分析</button>
     <button class="tab-btn" data-tab="plan" role="tab">訓練建議</button>
     <a class="tab-btn" href="https://jim841019g.github.io/running/map/" style="text-decoration:none;">足跡地圖 ↗</a>
@@ -327,6 +328,41 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
     </section>
   </div><!-- /tab-weekly -->
 
+  <div class="tabpane" id="tab-recovery" hidden>
+    <div class="kpis" id="rcv-kpis"></div>
+
+    <section>
+      <h2>睡眠與 HRV</h2>
+      <p class="sub">每日睡眠時數（柱）與早晨 HRV（線），淺帶為 Garmin 算出的你的個人 HRV 基線區間。資料來自 Garmin 手錶，每日自動同步。</p>
+      <div class="card table-scroll" style="padding:10px 0;"><div id="rcv-chart"></div></div>
+    </section>
+
+    <section>
+      <h2>訓練負荷 vs 恢復</h2>
+      <p class="sub">每週跑量（柱）疊上該週平均 Training Readiness（線）。跑量往上而 Readiness 同步往下，就是負荷超過恢復能力的訊號。</p>
+      <div class="card table-scroll" style="padding:10px 0;"><div id="rcv-load-chart"></div></div>
+    </section>
+
+    <section>
+      <h2>恢復觀察</h2>
+      <div class="insights" id="rcv-insights"></div>
+    </section>
+
+    <section>
+      <h2>每日明細</h2>
+      <p class="sub">最近 30 天。睡眠是當日凌晨結束的那一覺；HRV 與 Readiness 是當天早上算出的值。</p>
+      <div class="card table-scroll" style="padding:6px 0;">
+        <table id="rcv-table">
+          <thead><tr>
+            <th>日期</th><th class="num">睡眠</th><th class="num">深眠</th><th class="num">分數</th>
+            <th class="num">HRV</th><th>HRV 狀態</th><th class="num">Readiness</th><th class="num">當天跑量</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div><!-- /tab-recovery -->
+
   <div class="tabpane" id="tab-races" hidden>
     <section style="margin-top:26px;">
       <h2>逐場比賽分析</h2>
@@ -359,6 +395,13 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
         本頁的價值在 Garmin 看不到的三件事——<b>①</b> 你的實際賽程與目標（Garmin 不知道 11/22 南山要全力、12 月要拚 3:40）、
         <b>②</b> 兩趟出國怎麼銜接（8/22–8/30 Perth、10/9–10/26），<b>③</b> 由你的比賽數據推出的個人弱點（腿端先崩、配速前衝）該補什麼。
         <b>建議把下面的階段目標與檢核點當「大方向」，日課照 Garmin 跑</b>；兩者衝突時，以「長距離不能少、賽前一週要減量」為優先。</p>
+      </div>
+      <div class="card" id="garmin-plan-card" style="margin-bottom:14px;" hidden>
+        <h3 style="margin:0 0 4px; font-size:14.5px;">近期 Garmin 排定</h3>
+        <p class="sub" style="margin:0 0 10px;" id="garmin-plan-sub"></p>
+        <div id="garmin-plan-list"></div>
+        <p style="font-size:12.5px; color:var(--ink-3); margin:10px 2px 0;">
+          Garmin 的自適應計畫每天重排，通常只排到一週左右，所以這裡是<b>近期實際日課</b>；下面的階段目標才是到 12 月的大方向。兩者衝突時以「長距離不能少、賽前一週要減量」為優先。</p>
       </div>
       <div class="card" style="margin-bottom:14px;">
         <div class="compare-grid" id="plan-anchors"></div>
@@ -450,6 +493,8 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
 </div>
 <div id="tip"></div>
 
+<script src="wellness.js"></script>
+<script src="plan.js"></script>
 <script src="data.js"></script>
 <script>
 // ---- 原始資料（Strava list_activities 全量）----
@@ -1290,6 +1335,237 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
     <td class="num">${km} km</td>
     <td class="num">${lr ? lr + " km" : "—"}</td>
     <td style="font-size:13px;">${q}</td></tr>`).join("");
+})();
+
+
+// ---- Tab：恢復（Garmin 睡眠／HRV／Training Readiness）----
+// 資料由 wellness.js（window.WELL）提供；沒有就整個分頁顯示待同步，絕不用推測值填。
+(function recoveryTab() {
+  const WL = window.WELL || {};
+  const SNAP = window.SNAP || {};
+  const days = Object.keys(WL).filter(d => WL[d] && Object.keys(WL[d]).length).sort();
+  if (!days.length) {
+    $("#rcv-kpis").innerHTML = `<div class="kpi"><div class="v num">—</div><div class="l">尚未同步到 Garmin 恢復數據</div></div>`;
+    return;
+  }
+  const rec = d => WL[d] || {};
+  const hm = sec => `${Math.floor(sec/3600)}h${String(Math.round(sec%3600/60)).padStart(2,"0")}`;
+  const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : null;
+  const kmOn = d => A.filter(a => a.t === "Run" && a.d === d).reduce((k,a) => k + a.m, 0) / 1000;
+
+  const last = days[days.length-1];
+  const recent = days.slice(-7);
+  const sl7 = avg(recent.map(d => rec(d).sl).filter(Boolean));
+  const hrv7 = avg(recent.map(d => rec(d).hrv).filter(Boolean));
+  const tr7 = avg(recent.map(d => rec(d).tr).filter(v => v != null));
+  const bal7 = recent.filter(d => rec(d).hrvst === "BALANCED").length;
+  const fmtT = s => `${Math.floor(s/3600)}:${String(Math.round(s%3600/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+
+  const kpi = [];
+  if (sl7)  kpi.push([hm(sl7), "", "近 7 日平均睡眠"]);
+  if (hrv7) kpi.push([Math.round(hrv7), "ms", "近 7 日平均 HRV"]);
+  kpi.push([`${bal7}/${recent.length}`, "天", "HRV 判定平衡"]);
+  if (tr7 != null) kpi.push([Math.round(tr7), "", "近 7 日 Readiness"]);
+  if (SNAP.vo2max) kpi.push([SNAP.vo2max.toFixed(1), "", "VO2max" + (SNAP.vo2date ? "（" + SNAP.vo2date.slice(5) + "）" : "")]);
+  if (SNAP.pred && SNAP.pred.fm) kpi.push([fmtT(SNAP.pred.fm), "", "Garmin 全馬預測"]);
+  $("#rcv-kpis").innerHTML = kpi.map(([v,u,l]) =>
+    `<div class="kpi"><div class="v num">${v}<small>${u}</small></div><div class="l">${l}</div></div>`).join("");
+
+  // ---- 圖一：睡眠柱 + HRV 線（近 60 天）----
+  {
+    const win = days.slice(-60);
+    const W = 1060, H = 280, ML = 44, MR = 46, MT = 16, MB = 34;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", style: "min-width:820px; display:block;" });
+    const iw = W - ML - MR, ih = H - MT - MB;
+    const maxH = Math.max(9, Math.ceil(Math.max(...win.map(d => (rec(d).sl||0)/3600))));
+    const hrvs = win.map(d => rec(d).hrv).filter(Boolean);
+    const hMin = Math.floor((Math.min(...hrvs) - 6) / 5) * 5, hMax = Math.ceil((Math.max(...hrvs) + 6) / 5) * 5;
+    const ys = h => MT + ih - h / maxH * ih;
+    const yh = v => MT + ih - (v - hMin) / (hMax - hMin) * ih;
+    const bw = iw / win.length;
+    for (let g = 0; g <= maxH; g += 2) {
+      el("line", { x1: ML, x2: W-MR, y1: ys(g), y2: ys(g), stroke: "var(--grid)", "stroke-width": 1 }, svg);
+      el("text", { x: ML-8, y: ys(g)+4, "text-anchor": "end", "font-size": 11, fill: "var(--ink-3)" }, svg).textContent = g + "h";
+    }
+    // HRV 個人基線帶（取最後一天的帶寬——Garmin 的帶會隨時間微調）
+    const lo = rec(last).hrvlo, hi = rec(last).hrvhi;
+    if (lo && hi) {
+      el("rect", { x: ML, y: yh(hi), width: iw, height: Math.max(1, yh(lo)-yh(hi)),
+                   fill: "var(--s-run)", opacity: .1 }, svg);
+      el("text", { x: W-MR+4, y: yh(hi)-3, "font-size": 10, fill: "var(--ink-3)" }, svg).textContent = "基線帶";
+    }
+    win.forEach((d, i) => {
+      const r = rec(d), x = ML + i*bw + bw*0.18, wdt = bw*0.64;
+      if (r.sl) {
+        const h = MT + ih - ys(r.sl/3600);
+        const bar = el("rect", { x: x.toFixed(1), y: ys(r.sl/3600).toFixed(1), width: Math.max(1.2, wdt).toFixed(1),
+                                 height: Math.max(0.5, h).toFixed(1), rx: 2, fill: "var(--s-run)", opacity: .55 }, svg);
+        const km = kmOn(d);
+        bar.addEventListener("mousemove", ev => showTip(ev, `<b>${d}</b><br>睡眠 ${hm(r.sl)}${r.sc?` · 分數 ${r.sc}`:""}` +
+          (r.dp?`<br>深眠 ${hm(r.dp)}${r.rm?` · REM ${hm(r.rm)}`:""}`:"") +
+          (r.hrv?`<br>HRV ${r.hrv} ms${r.hrvst?`（${r.hrvst==="BALANCED"?"平衡":"失衡"}）`:""}`:"") +
+          (r.tr!=null?`<br>Readiness ${r.tr}`:"") + (km?`<br>當天跑 ${km.toFixed(1)} km`:"")));
+        bar.addEventListener("mouseleave", hideTip);
+      }
+    });
+    // HRV 折線（跳過缺值不連線）
+    let seg = [];
+    const flush = () => {
+      if (seg.length > 1) el("polyline", { points: seg.join(" "), fill: "none",
+        stroke: "var(--accent)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+      seg = [];
+    };
+    win.forEach((d, i) => {
+      const v = rec(d).hrv, x = ML + i*bw + bw/2;
+      if (!v) { flush(); return; }
+      seg.push(`${x.toFixed(1)},${yh(v).toFixed(1)}`);
+      const dot = el("circle", { cx: x.toFixed(1), cy: yh(v).toFixed(1), r: 2.4,
+        fill: rec(d).hrvst === "BALANCED" ? "var(--accent)" : "#d4703a" }, svg);
+      dot.addEventListener("mousemove", ev => showTip(ev, `<b>${d}</b><br>HRV ${v} ms（${rec(d).hrvst==="BALANCED"?"平衡":"失衡"}）`));
+      dot.addEventListener("mouseleave", hideTip);
+    });
+    flush();
+    for (let g = hMin; g <= hMax; g += Math.max(5, Math.round((hMax-hMin)/4/5)*5))
+      el("text", { x: W-MR+4, y: yh(g)+4, "font-size": 11, fill: "var(--ink-3)" }, svg).textContent = g;
+    win.forEach((d, i) => {
+      if (d.slice(8) === "01" || i === 0)
+        el("text", { x: ML + i*bw + bw/2, y: H-8, "text-anchor": "middle", "font-size": 10.5,
+                     fill: "var(--ink-3)" }, svg).textContent = d.slice(5).replace("-", "/");
+    });
+    $("#rcv-chart").appendChild(svg);
+  }
+
+  // ---- 圖二：週跑量柱 + 週平均 Readiness 線 ----
+  {
+    const monOf = d => { const t = dateOf(d); const w = (t.getDay() + 6) % 7;
+      t.setDate(t.getDate() - w); return t.toISOString().slice(0,10); };
+    const wk = new Map();
+    days.forEach(d => {
+      const k = monOf(d);
+      if (!wk.has(k)) wk.set(k, { km: 0, tr: [], hrv: [] });
+      const o = wk.get(k);
+      if (rec(d).tr != null) o.tr.push(rec(d).tr);
+      if (rec(d).hrv) o.hrv.push(rec(d).hrv);
+    });
+    A.filter(a => a.t === "Run" && a.d >= days[0]).forEach(a => {
+      const k = monOf(a.d);
+      if (wk.has(k)) wk.get(k).km += a.m / 1000;
+    });
+    const keys = [...wk.keys()].sort();
+    const W = 1000, H = 250, ML = 42, MR = 42, MT = 16, MB = 32;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", style: "min-width:700px; display:block;" });
+    const iw = W - ML - MR, ih = H - MT - MB;
+    const maxKm = Math.max(20, Math.ceil(Math.max(...keys.map(k => wk.get(k).km)) / 10) * 10);
+    const yk = v => MT + ih - v / maxKm * ih, yt = v => MT + ih - v / 100 * ih;
+    const bw = iw / keys.length;
+    for (let g = 0; g <= maxKm; g += 10) {
+      el("line", { x1: ML, x2: W-MR, y1: yk(g), y2: yk(g), stroke: "var(--grid)", "stroke-width": 1 }, svg);
+      el("text", { x: ML-8, y: yk(g)+4, "text-anchor": "end", "font-size": 11, fill: "var(--ink-3)" }, svg).textContent = g;
+    }
+    keys.forEach((k, i) => {
+      const o = wk.get(k), x = ML + i*bw + bw*0.2, wdt = bw*0.6;
+      if (o.km > 0) {
+        const bar = el("rect", { x: x.toFixed(1), y: yk(o.km).toFixed(1), width: wdt.toFixed(1),
+          height: (MT+ih-yk(o.km)).toFixed(1), rx: 3, fill: "var(--s-run)", opacity: .5 }, svg);
+        const t = avg(o.tr), h = avg(o.hrv);
+        bar.addEventListener("mousemove", ev => showTip(ev, `<b>${k} 那週</b><br>跑量 ${o.km.toFixed(1)} km` +
+          (t!=null?`<br>平均 Readiness ${Math.round(t)}`:"") + (h?`<br>平均 HRV ${Math.round(h)} ms`:"")));
+        bar.addEventListener("mouseleave", hideTip);
+      }
+    });
+    const pts = keys.map((k,i) => ({ i, v: avg(wk.get(k).tr) })).filter(p => p.v != null);
+    if (pts.length > 1)
+      el("polyline", { points: pts.map(p => `${(ML+p.i*bw+bw/2).toFixed(1)},${yt(p.v).toFixed(1)}`).join(" "),
+        fill: "none", stroke: "var(--accent)", "stroke-width": 2 }, svg);
+    pts.forEach(p => el("circle", { cx: (ML+p.i*bw+bw/2).toFixed(1), cy: yt(p.v).toFixed(1), r: 2.6, fill: "var(--accent)" }, svg));
+    for (let g = 0; g <= 100; g += 25)
+      el("text", { x: W-MR+4, y: yt(g)+4, "font-size": 11, fill: "var(--ink-3)" }, svg).textContent = g;
+    keys.forEach((k, i) => el("text", { x: ML+i*bw+bw/2, y: H-8, "text-anchor": "middle", "font-size": 10,
+      fill: "var(--ink-3)" }, svg).textContent = k.slice(5).replace("-", "/"));
+    $("#rcv-load-chart").appendChild(svg);
+  }
+
+  // ---- 恢復觀察（全部由上面同一份資料算出）----
+  {
+    const items = [];
+    const withTr = days.filter(d => rec(d).tr != null);
+    const withSl = days.filter(d => rec(d).sl);
+    const balShare = days.filter(d => rec(d).hrvst).length
+      ? days.filter(d => rec(d).hrvst === "BALANCED").length / days.filter(d => rec(d).hrvst).length : null;
+    if (balShare != null) {
+      const recentBal = recent.filter(d => rec(d).hrvst === "BALANCED").length / Math.max(1, recent.filter(d => rec(d).hrvst).length);
+      const dir = recentBal > balShare + 0.15 ? "近一週明顯轉好" : recentBal < balShare - 0.15 ? "近一週轉差" : "與整段期間持平";
+      items.push([recentBal >= 0.6 ? "pos" : "neg", "HRV 平衡比例",
+        `有紀錄的 ${days.filter(d=>rec(d).hrvst).length} 天裡，Garmin 判定「平衡」占 ${(balShare*100).toFixed(0)}%，${dir}（近 7 日 ${bal7}/${recent.length} 天）。HRV 失衡通常落後於負荷 1–3 天出現，連續失衡才需要動課表；單日跳動不用理。`]);
+    }
+    if (withSl.length >= 10 && withTr.length >= 10) {
+      const med = [...withSl.map(d => rec(d).sl)].sort((a,b)=>a-b)[Math.floor(withSl.length/2)];
+      const hi = withTr.filter(d => rec(d).sl >= med).map(d => rec(d).tr);
+      const lo = withTr.filter(d => rec(d).sl && rec(d).sl < med).map(d => rec(d).tr);
+      if (hi.length >= 4 && lo.length >= 4) {
+        const gap = avg(hi) - avg(lo);
+        items.push([gap >= 6 ? "neu" : "pos", "睡眠對 Readiness 的實際影響",
+          `以你的睡眠中位數 ${hm(med)} 切一半：睡得多的那半平均 Readiness ${Math.round(avg(hi))}，睡得少的那半 ${Math.round(avg(lo))}，差 ${gap>=0?"+":""}${gap.toFixed(0)} 分。` +
+          (gap >= 10 ? "落差夠大——對你來說睡眠是恢復的主要槓桿，比多做恢復跑有用。" :
+           gap >= 6 ? "有影響但不算劇烈，睡眠是其中一個因素而非唯一。" :
+           "落差不大，代表你目前的 Readiness 波動主要來自訓練負荷本身，不是睡眠。")]);
+      }
+    }
+    // 質量課／長距離的隔天恢復
+    const nextOf = d => { const t = dateOf(d); t.setDate(t.getDate()+1); return t.toISOString().slice(0,10); };
+    const hard = A.filter(a => a.t === "Run" && a.d >= days[0] && (isQual(a) || a.m >= 12000 || a.r));
+    const easyD = A.filter(a => a.t === "Run" && a.d >= days[0] && !isQual(a) && a.m < 12000 && !a.r);
+    const trAfter = set => set.map(a => rec(nextOf(a.d)).tr).filter(v => v != null);
+    const ah = trAfter(hard), ae = trAfter(easyD);
+    if (ah.length >= 3 && ae.length >= 5) {
+      const gap = avg(ae) - avg(ah);
+      items.push([gap >= 10 ? "neg" : "pos", "質量課／長距離的隔日代價",
+        `質量課或 12 km 以上長距離的<b>隔天</b>平均 Readiness ${Math.round(avg(ah))}（${ah.length} 次），easy 課隔天 ${Math.round(avg(ae))}（${ae.length} 次），差 ${gap.toFixed(0)} 分。` +
+        (gap >= 10 ? "代價明顯——課表安排上，硬課的隔天就該是 easy 或休息，連兩天硬課會累積成失衡。"
+                   : "代價不大，代表目前的硬課劑量在你的承受範圍內，可以照 Garmin 排的節奏走。")]);
+    }
+    if (SNAP.pred && SNAP.pred.fm) {
+      const g = 3*3600 + 40*60;
+      const diff = SNAP.pred.fm - g;
+      items.push([diff <= 0 ? "pos" : "neu", "Garmin 的賽事預測怎麼看",
+        `Garmin 目前預測全馬 ${fmtT(SNAP.pred.fm)}、半馬 ${fmtT(SNAP.pred.hm)}，距 3:40 目標 ${diff>0?"還差 "+Math.round(diff/60)+" 分鐘":"已達標 "+Math.round(-diff/60)+" 分鐘"}。` +
+        `這個預測吃的是「最近的實際跑量與強度」，夏天全在跑 easy 會被壓低；你 2026-01 的半馬 PB 1:39:11 用 Riegel 推是 3:25。兩個數字的落差本身就是資訊：體能底子在，缺的是專項強度與長距離的累積。`]);
+    }
+    $("#rcv-insights").innerHTML = items.map(([cls, title, body]) => {
+      const tag = cls === "pos" ? "優勢" : cls === "neg" ? "缺口" : "評估";
+      return `<div class="insight"><h3><span class="tag ${cls}">${tag}</span>${title}</h3><p>${body}</p></div>`;
+    }).join("");
+  }
+
+  // ---- 每日明細（近 30 天）----
+  $("#rcv-table tbody").innerHTML = days.slice(-30).reverse().map(d => {
+    const r = rec(d), km = kmOn(d);
+    const st = r.hrvst ? (r.hrvst === "BALANCED" ? '<span style="color:var(--accent-ink)">平衡</span>' : "失衡") : "—";
+    return `<tr><td>${d.slice(5)}</td><td class="num">${r.sl?hm(r.sl):"—"}</td><td class="num">${r.dp?hm(r.dp):"—"}</td>
+      <td class="num">${r.sc??"—"}</td><td class="num">${r.hrv??"—"}</td><td>${st}</td>
+      <td class="num">${r.tr??"—"}</td><td class="num">${km?km.toFixed(1)+" km":"—"}</td></tr>`;
+  }).join("");
+})();
+
+// ---- 訓練建議 tab：Garmin 教練近期排定 ----
+(function garminPlan() {
+  const P = window.PLAN;
+  if (!P || !P.items || !P.items.length) return;
+  const today = new Date(Date.now() + 8*3600*1000).toISOString().slice(0,10);   // 台北日期
+  const up = P.items.filter(i => i.d >= today);
+  const show = up.length ? up : P.items.slice(-6);
+  const byDay = new Map();
+  show.forEach(i => { if (!byDay.has(i.d)) byDay.set(i.d, []); byDay.get(i.d).push(i.title); });
+  const WD = ["日","一","二","三","四","五","六"];
+  $("#garmin-plan-sub").textContent =
+    `Garmin 教練排到 ${show[show.length-1].d}（同步於 ${P.fetched}）${up.length?"":"，目前沒有未來的排定，以下為最後幾筆"}`;
+  $("#garmin-plan-list").innerHTML = [...byDay.entries()].map(([d, ts]) => {
+    const wd = WD[dateOf(d).getDay()];
+    return `<div style="display:flex; gap:12px; align-items:baseline; padding:5px 0; border-bottom:1px solid var(--border);">
+      <div class="num" style="min-width:74px; color:var(--ink-2); font-size:13px;">${d.slice(5).replace("-","/")}（${wd}）</div>
+      <div style="font-size:14px;">${ts.join(" ＋ ")}</div></div>`;
+  }).join("");
+  $("#garmin-plan-card").hidden = false;
 })();
 
 </script>
