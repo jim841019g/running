@@ -55,9 +55,9 @@ const decode = p => {
 };
 
 const map = L.map("map", { zoomControl: true });
-L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/">CARTO</a>',
-  maxZoom: 20
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+  attribution: 'Tiles © <a href="https://www.esri.com/">Esri</a> — Esri, DeLorme, NAVTEQ, and contributors',
+  maxZoom: 19
 }).addTo(map);
 
 const KNOWN = [
@@ -82,6 +82,9 @@ const KNOWN = [
   [36.88, -111.5, "佩吉・羚羊谷"],
   [36.06, -112.11, "大峽谷"],
   [36.02, -114.75, "胡佛水壩"],
+  [-31.9600, 115.8690, "伯斯 Perth"],
+  [-32.0000, 115.5395, "羅特尼斯島 Rottnest"],
+  [-27.5568, 114.4451, "Kalbarri 國家公園"],
   [-11.64, 166.96, "Zwift Watopia（虛擬）"]
 ];
 const colorOf = t => t === "Ride" ? "#e2571b" : (t === "Walk" || t === "Hike") ? "#0c8f5b" : "#1d6ef0";
@@ -126,7 +129,8 @@ KNOWN.forEach(([la, lo, name]) => {
   b.addEventListener("click", () => map.flyTo([la, lo], jumpZoom[name] || 12));
   regionsBox.appendChild(b);
 });
-document.getElementById("stats").textContent = `${count} 條路線 · ${Math.round(totalKm)} km · 資料至 2026-08-04`;
+const lastDate = ROUTES.reduce((m, r) => r.d > m ? r.d : m, "");
+document.getElementById("stats").textContent = `${count} 條路線 · ${Math.round(totalKm)} km · 資料至 ${lastDate}`;
 
 map.setView([25.0296, 121.5357], 14); // 開場：大安森林公園
 </script>
