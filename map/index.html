@@ -132,7 +132,20 @@ KNOWN.forEach(([la, lo, name]) => {
 const lastDate = ROUTES.reduce((m, r) => r.d > m ? r.d : m, "");
 document.getElementById("stats").textContent = `${count} 條路線 · ${Math.round(totalKm)} km · 資料至 ${lastDate}`;
 
-map.setView([25.0296, 121.5357], 14); // 開場：大安森林公園
+// 開場：台北全景——用台北一帶所有軌跡的實際範圍 fit，而不是寫死一個縮放層級
+{
+  const b = L.latLngBounds([]);
+  ROUTES.forEach(r => {
+    const pts = decode(r.p);
+    if (pts.length < 2) return;
+    const [la, lo] = pts[0];
+    // 只收台北盆地內的軌跡（±0.25° ≈ 28 km）；放寬到 0.8° 會把石門水庫拉進來，
+    // 整張圖被縮到看得見新竹，就不叫台北全景了
+    if (Math.abs(la - 25.04) < 0.25 && Math.abs(lo - 121.54) < 0.25) pts.forEach(p => b.extend(p));
+  });
+  if (b.isValid()) map.fitBounds(b, { padding: [24, 24], maxZoom: 13 });
+  else map.setView([25.05, 121.53], 12);
+}
 </script>
 </body>
 </html>
