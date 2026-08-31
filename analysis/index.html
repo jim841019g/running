@@ -411,6 +411,10 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
         </p>
       </div>
 
+      <h2 style="margin-top:32px;">🏁 9/20 永慶盃 10.5K 配速卡</h2>
+      <p class="sub" id="race-countdown"></p>
+      <div class="card" id="race-card"></div>
+
       <h2 style="margin-top:32px;">四個階段</h2>
       <p class="sub">週跑量每 3–4 週回落一次（恢復週），總量絕不單週 +10% 以上。</p>
       <div class="insights" id="plan-phases"></div>
@@ -1566,6 +1570,107 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
       <div style="font-size:14px;">${ts.join(" ＋ ")}</div></div>`;
   }).join("");
   $("#garmin-plan-card").hidden = false;
+})();
+
+
+// ---- 9/20 永慶盃 10.5K 配速卡（訓練建議分頁）----
+// 配速由實測數據推導，見卡片底部「依據」：涼天閾值 4:36（8/27 Perth，體感 13.2°C、心率 160）
+// 對照台北同強度 4:50–4:52（8/04、8/08）＝ 熱天代價 15 s/km。
+(function raceCard() {
+  const box = $("#race-card");
+  if (!box) return;
+  const RACE = "2026-09-20", NAME = "永慶盃 10.5K", DIST = 10.5;
+  const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const days = Math.round((dateOf(RACE) - dateOf(today)) / 86400000);
+  $("#race-countdown").textContent = days > 0
+    ? `距離比賽還有 ${days} 天　·　定位：夏訓驗收，不是主目標賽（主目標是 11/22 南山半馬與 12 月全馬）`
+    : days === 0 ? "就是今天。前 3 km 不准超過心率 155。"
+    : `已於 ${RACE} 完賽（${-days} 天前）`;
+
+  const mmss = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+  const hms = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+
+  // 分段計畫（秒/km）——刻意負分段：前段慢 10 秒，最後 2.5 km 收
+  const SPLITS = [
+    [1, 295, "起跑段。被人群帶快是最常見的死法，跑到 4:35 要主動慢下來"],
+    [2, 290, ""],
+    [3, 287, ""],
+    [4, 287, ""],
+    [5, 285, "進入目標配速，這裡開始才是比賽"],
+    [6, 285, ""],
+    [7, 285, ""],
+    [8, 282, "開始收，心率可以放上 165"],
+    [9, 282, ""],
+    [10, 278, ""],
+    [10.5, 270, "剩下的不用管了"]
+  ];
+  let acc = 0;
+  const rows = SPLITS.map(([km, pace, note], i) => {
+    const seg = i === SPLITS.length - 1 ? 0.5 : 1;
+    acc += pace * seg;
+    return `<tr>
+      <td class="num">${km === 10.5 ? "末 0.5" : km}</td>
+      <td class="num"><b>${mmss(pace)}</b></td>
+      <td class="num">${hms(acc)}</td>
+      <td style="font-size:12.5px; color:var(--ink-2); white-space:normal;">${note}</td></tr>`;
+  }).join("");
+
+  const SNAP = window.SNAP || {};
+  const riegel = (t, from, to) => t * Math.pow(to / from, 1.06);
+  const gPred = SNAP.pred && SNAP.pred["10k"] ? riegel(SNAP.pred["10k"], 10, DIST) : null;
+  const hmPB = 99 * 60 + 11;                       // 1:39:11（2026-01 渣打）
+  const rPred = riegel(hmPB, 21.0975, DIST);
+
+  const targets = [
+    ["A", "體感 <30°C、狀況好", 280, "pos"],
+    ["B", "典型情況（體感 32°C）", 285, "neu"],
+    ["C", "爆熱或狀況差", 295, "neg"]
+  ];
+  const tRows = targets.map(([g, cond, pace, cls]) => `
+    <div class="compare-cell">
+      <div class="y num">${g}｜${mmss(pace)}<small style="font-weight:400">/km</small></div>
+      <div class="num" style="font-size:19px; font-weight:650;">${hms(pace * DIST)}</div>
+      <div style="font-size:12.5px; color:var(--ink-2);">${cond}</div>
+    </div>`).join("");
+
+  box.innerHTML = `
+    <div style="font-size:14px; margin:0 0 12px;">主目標 <b>B：均速 4:45/km ＝ ${hms(acc)}</b>（依下面的分段表實算，不是平均配速×距離）。
+    這場的重點不是配速，是<b>紀律</b>——你的比賽數據一致指向「前衝後爆、腿先崩」，
+    兩次 5K 測驗與兩次國道賽都是同一個模式。</div>
+
+    <div class="compare-grid" style="margin-bottom:16px;">${tRows}</div>
+
+    <h3 style="font-size:14px; margin:18px 0 8px;">分段表（B 目標）</h3>
+    <div class="table-scroll" style="margin:0 0 4px;">
+      <table><thead><tr><th class="num">km</th><th class="num">配速</th><th class="num">累計</th><th>提醒</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>
+
+    <h3 style="font-size:14px; margin:18px 0 8px;">心率紅線</h3>
+    <div style="font-size:13.5px; line-height:1.9;">
+      <div>前 3 km　<b style="color:#c2410c">不准超過 155</b>　← 唯一的硬規定，過了這條線後面一定崩</div>
+      <div>4–7 km　　158–163（你的閾值區間）</div>
+      <div>8 km 之後　165 以上可以</div>
+      <div>最後 1 km　不用管（歷史觀察最高 175）</div>
+      <div style="color:var(--ink-2); font-size:12.5px; margin-top:6px;">
+        熱天同配速心率本來就高 5–8 下，所以前段<b>寧可慢也不要追配速</b>。</div>
+    </div>
+
+    <h3 style="font-size:14px; margin:18px 0 8px;">賽前與賽中</h3>
+    <div style="font-size:13.5px; line-height:1.9;">
+      <div>👟 穿 <b>驚碳 3.0 Turbo</b>。赤兔 9 Pro 目前僅 14.8 km／2 次，比賽不要試新鞋。</div>
+      <div>💧 <b>每個水站都拿</b>，即使不渴——體感 32°C、濕度 85% 以上。8/08 抽筋那天就是高濕度。</div>
+      <div>📅 賽前一週減量：9/16 一次 3×1km @ 4:40「喚醒」，9/18–19 只 3–4K easy ＋ 4–6 趟 100m strides，前一天不超過 30 分鐘。</div>
+    </div>
+
+    <h3 style="font-size:14px; margin:18px 0 8px;">配速怎麼算出來的</h3>
+    <div style="font-size:12.5px; color:var(--ink-2); line-height:1.85;">
+      <div>· <b>你自己的閾值</b>：8/27 Perth 體感 13.2°C 跑出 3.9k @ 4:36（心率 160、脫鉤僅 +4.1%）；
+      台北同強度 8/04 4:52、8/08 4:50（心率 165–166、脫鉤 +11～+14%）→ <b>熱天代價實測 15 s/km</b> → 4:51</div>
+      <div>· <b>Garmin 預測</b>${gPred ? `（${SNAP.preddate || ""}）`: ""}：10.5K ${gPred ? hms(gPred) + `／${mmss(gPred / DIST)}` : "—"}</div>
+      <div>· <b>Riegel 從半馬 PB 推</b>（1:39:11，2026-01 渣打，涼天）：10.5K ${hms(rPred)}／${mmss(rPred / DIST)}</div>
+      <div>· <b>當天天氣</b>：台北近三年 9/20 早上 06:00 體感 28.8–32.4°C、07:00 31.6–34.2°C（Open-Meteo 歷史資料）——這場不會涼。</div>
+    </div>`;
 })();
 
 </script>
