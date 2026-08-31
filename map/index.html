@@ -25,6 +25,10 @@
   }
   .regions button:hover { background: #eef2f8; }
   .regions button b { color: #888; font-weight: 500; }
+  .regions .c-head { font-weight: 600; }
+  .regions .arw { display: inline-block; width: 12px; color: #999; font-size: 10px; }
+  .regions .cities { margin: 0 0 4px 12px; border-left: 1px solid #e3e6ea; padding-left: 4px; }
+  .regions .cities button { font-size: 12px; color: #444; }
   .stats { color: #666; margin-top: 8px; font-size: 12px; }
 </style>
 </head>
@@ -60,32 +64,33 @@ L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_M
   maxZoom: 19
 }).addTo(map);
 
+// [緯度, 經度, 地點, 國家] —— 國家欄位供選單第一層分組用
 const KNOWN = [
-  [25.04, 121.54, "台北（主場）"],
-  [25.0296, 121.5357, "大安森林公園"],
-  [24.81, 121.24, "桃園・石門水庫"],
-  [23.46, 120.44, "嘉義"],
-  [51.07, -115.41, "加拿大・Banff／Canmore"],
-  [51.42, -116.21, "露易絲湖・夢蓮湖"],
-  [49.28, -123.13, "溫哥華"],
-  [62.46, -114.37, "黃刀鎮"],
-  [47.66, -122.33, "西雅圖"],
-  [-37.85, 144.98, "墨爾本"],
-  [-38.76, 143.55, "大洋路"],
-  [-27.47, 153.02, "布里斯本"],
-  [37.53, 126.93, "首爾"],
-  [37.58, 128.33, "平昌・滑雪場"],
-  [46.41, 11.58, "多洛米蒂"],
-  [43.71, 7.29, "尼斯・摩納哥"],
-  [44.84, -0.57, "波爾多"],
-  [34.06, -118.13, "洛杉磯"],
-  [36.88, -111.5, "佩吉・羚羊谷"],
-  [36.06, -112.11, "大峽谷"],
-  [36.02, -114.75, "胡佛水壩"],
-  [-31.9600, 115.8690, "伯斯 Perth"],
-  [-32.0000, 115.5395, "羅特尼斯島 Rottnest"],
-  [-27.5568, 114.4451, "Kalbarri 國家公園"],
-  [-11.64, 166.96, "Zwift Watopia（虛擬）"]
+  [25.04, 121.54, "台北（主場）", "🇹🇼 台灣"],
+  [25.0296, 121.5357, "大安森林公園", "🇹🇼 台灣"],
+  [24.81, 121.24, "桃園・石門水庫", "🇹🇼 台灣"],
+  [23.46, 120.44, "嘉義", "🇹🇼 台灣"],
+  [51.07, -115.41, "加拿大・Banff／Canmore", "🇨🇦 加拿大"],
+  [51.42, -116.21, "露易絲湖・夢蓮湖", "🇨🇦 加拿大"],
+  [49.28, -123.13, "溫哥華", "🇨🇦 加拿大"],
+  [62.46, -114.37, "黃刀鎮", "🇨🇦 加拿大"],
+  [47.66, -122.33, "西雅圖", "🇺🇸 美國"],
+  [34.06, -118.13, "洛杉磯", "🇺🇸 美國"],
+  [36.88, -111.5, "佩吉・羚羊谷", "🇺🇸 美國"],
+  [36.06, -112.11, "大峽谷", "🇺🇸 美國"],
+  [36.02, -114.75, "胡佛水壩", "🇺🇸 美國"],
+  [-37.85, 144.98, "墨爾本", "🇦🇺 澳洲"],
+  [-38.76, 143.55, "大洋路", "🇦🇺 澳洲"],
+  [-27.47, 153.02, "布里斯本", "🇦🇺 澳洲"],
+  [-31.9600, 115.8690, "伯斯 Perth", "🇦🇺 澳洲"],
+  [-32.0000, 115.5395, "羅特尼斯島 Rottnest", "🇦🇺 澳洲"],
+  [-27.5568, 114.4451, "Kalbarri 國家公園", "🇦🇺 澳洲"],
+  [37.53, 126.93, "首爾", "🇰🇷 韓國"],
+  [37.58, 128.33, "平昌・滑雪場", "🇰🇷 韓國"],
+  [46.41, 11.58, "多洛米蒂", "🇮🇹 義大利"],
+  [43.71, 7.29, "尼斯・摩納哥", "🇫🇷 法國"],
+  [44.84, -0.57, "波爾多", "🇫🇷 法國"],
+  [-11.64, 166.96, "Zwift Watopia（虛擬）", "🕹️ 虛擬"]
 ];
 const colorOf = t => t === "Ride" ? "#e2571b" : (t === "Walk" || t === "Hike") ? "#0c8f5b" : "#1d6ef0";
 const groupOf = t => (t === "Walk" || t === "Hike") ? "Walk" : (t === "Ride" ? "Ride" : "Run");
@@ -93,6 +98,8 @@ const groupOf = t => (t === "Walk" || t === "Hike") ? "Walk" : (t === "Ride" ? "
 const layers = { Run: L.layerGroup().addTo(map), Ride: L.layerGroup().addTo(map), Walk: L.layerGroup().addTo(map) };
 let totalKm = 0, count = 0;
 const regionCount = new Map();
+const countryBounds = new Map();                       // 國家 -> 該國所有軌跡的 bounds
+const countryOf = new Map(KNOWN.map(([, , name, c]) => [name, c]));
 ROUTES.forEach(r => {
   const pts = decode(r.p);
   if (pts.length < 2) return;
@@ -109,7 +116,15 @@ ROUTES.forEach(r => {
     if (d < bd && k[2] !== "大安森林公園" && k[2] !== "台北（主場）") { bd = d; best = k[2]; }
     else if (d < bd && k[2] === "台北（主場）") { bd = d; best = k[2]; }
   });
-  if (best) regionCount.set(best, (regionCount.get(best) || 0) + 1);
+  if (best) {
+    regionCount.set(best, (regionCount.get(best) || 0) + 1);
+    // 順便累積每個國家的軌跡範圍，供選單第一層 fit 用
+    const c = countryOf.get(best);
+    if (c) {
+      if (!countryBounds.has(c)) countryBounds.set(c, L.latLngBounds([]));
+      pts.forEach(p => countryBounds.get(c).extend(p));
+    }
+  }
 });
 
 document.querySelectorAll(".panel input[type=checkbox]").forEach(cb => {
@@ -119,16 +134,54 @@ document.querySelectorAll(".panel input[type=checkbox]").forEach(cb => {
   });
 });
 
+// 選單做成兩層折頁：第一層國家、第二層城市。同時只展開一個國家。
 const regionsBox = document.getElementById("regions");
 const jumpZoom = { "台北（主場）": 13, "大安森林公園": 15 };
-KNOWN.forEach(([la, lo, name]) => {
+
+const byCountry = new Map();          // 國家 -> [[la, lo, name], ...]（沿用 KNOWN 的順序）
+KNOWN.forEach(([la, lo, name, country]) => {
   const n = regionCount.get(name);
-  if (!n && name !== "大安森林公園") return;
-  const b = document.createElement("button");
-  b.innerHTML = `${name} ${n ? `<b>（${n}）</b>` : ""}`;
-  b.addEventListener("click", () => map.flyTo([la, lo], jumpZoom[name] || 12));
-  regionsBox.appendChild(b);
+  if (!n && name !== "大安森林公園") return;   // 沒有軌跡的地點不列（大安森林公園固定保留當快捷）
+  if (!byCountry.has(country)) byCountry.set(country, []);
+  byCountry.get(country).push([la, lo, name, n || 0]);
 });
+
+const panels = [];
+byCountry.forEach((places, country) => {
+  const total = places.reduce((s, p) => s + p[3], 0);
+  const head = document.createElement("button");
+  head.className = "c-head";
+  head.innerHTML = `<span class="arw">▸</span>${country}<b>（${total}）</b>`;
+
+  const box = document.createElement("div");
+  box.className = "cities";
+  box.hidden = true;
+  places.forEach(([la, lo, name, n]) => {
+    const b = document.createElement("button");
+    b.innerHTML = `${name} ${n ? `<b>（${n}）</b>` : ""}`;
+    b.addEventListener("click", ev => { ev.stopPropagation(); map.flyTo([la, lo], jumpZoom[name] || 12); });
+    box.appendChild(b);
+  });
+
+  const open = () => {
+    const wasOpen = !box.hidden;
+    panels.forEach(p => { p.box.hidden = true; p.head.querySelector(".arw").textContent = "▸"; });
+    if (wasOpen) return;                       // 再點一次＝收合
+    box.hidden = false;
+    head.querySelector(".arw").textContent = "▾";
+    // 展開時順便把鏡頭帶到這個國家的所有軌跡範圍
+    const cb = countryBounds.get(country);
+    if (cb && cb.isValid()) map.flyToBounds(cb, { padding: [30, 30], maxZoom: 13 });
+  };
+  head.addEventListener("click", open);
+  regionsBox.appendChild(head);
+  regionsBox.appendChild(box);
+  panels.push({ head, box, country, open });
+});
+
+// 預設展開台灣（主場），但不移動鏡頭——開場已經是台北全景了
+const tw = panels.find(p => p.country.includes("台灣"));
+if (tw) { tw.box.hidden = false; tw.head.querySelector(".arw").textContent = "▾"; }
 const lastDate = ROUTES.reduce((m, r) => r.d > m ? r.d : m, "");
 document.getElementById("stats").textContent = `${count} 條路線 · ${Math.round(totalKm)} km · 資料至 ${lastDate}`;
 
