@@ -344,6 +344,21 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
     </section>
 
     <section>
+      <h2>體能趨勢：VO2max 與 Garmin 賽事預測</h2>
+      <p class="sub">Garmin 每天重算的 VO2max（線）與全馬預測（面）。預測吃的是近期實際訓練量與強度，夏天全跑 easy 會被壓低——所以這張圖看的是<b>方向</b>，不是絕對值。虛線是 3:40 目標。</p>
+      <div class="card table-scroll" style="padding:10px 0;"><div id="trend-chart"></div></div>
+    </section>
+
+    <section>
+      <h2>訓練強度分佈（80/20）</h2>
+      <p class="sub">每週跑步時間落在各心率區間的比例。有氧訓練的通則是輕鬆（Z1–Z2）約八成、其餘兩成放在 Z3 以上；比例長期失衡（中間強度太多）就是所謂的「灰色地帶」。
+      <br><b>讀這張圖要先知道</b>：區間是照你 Garmin 的設定切的，Z2/Z3 的分界在 143 bpm，而你 easy 課的平均心率多半落在 141–148——
+      也就是說 easy 跑很容易被判進 Z3。所以這裡的「輕鬆比例偏低」有一部分是區間設定造成的，
+      要下「中強度太多」的結論之前，得先確認心率區間設定符合你的實際最大心率（觀察值 175）。</p>
+      <div class="card table-scroll" style="padding:10px 0;"><div id="zone-chart"></div></div>
+    </section>
+
+    <section>
       <h2>恢復觀察</h2>
       <div class="insights" id="rcv-insights"></div>
     </section>
@@ -498,6 +513,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
 <div id="tip"></div>
 
 <script src="wellness.js"></script>
+<script src="trend.js"></script>
 <script src="plan.js"></script>
 <script src="data.js"></script>
 <script>
@@ -1671,6 +1687,138 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
       <div>· <b>Riegel 從半馬 PB 推</b>（1:39:11，2026-01 渣打，涼天）：10.5K ${hms(rPred)}／${mmss(rPred / DIST)}</div>
       <div>· <b>當天天氣</b>：台北近三年 9/20 早上 06:00 體感 28.8–32.4°C、07:00 31.6–34.2°C（Open-Meteo 歷史資料）——這場不會涼。</div>
     </div>`;
+})();
+
+
+// ---- 體能趨勢（VO2max ＋ 全馬預測）與訓練強度分佈 ----
+// 資料由 trend.js 提供（window.TREND / window.ZONES）；沒有就不畫，不用假資料佔位。
+(function trendCharts() {
+  const T = window.TREND || {}, Z = window.ZONES || {};
+  const days = Object.keys(T).sort();
+
+  if (days.length > 5 && $("#trend-chart")) {
+    const W = 1040, H = 280, ML = 44, MR = 54, MT = 16, MB = 34;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", style: "min-width:800px; display:block;" });
+    const iw = W - ML - MR, ih = H - MT - MB;
+    const vo = days.map(d => T[d].vo2).filter(v => v != null);
+    const fm = days.map(d => T[d].fm).filter(v => v != null);
+    const vMin = Math.floor(Math.min(...vo) - 1), vMax = Math.ceil(Math.max(...vo) + 1);
+    const fMin = Math.min(...fm, 3 * 3600 + 40 * 60) - 300, fMax = Math.max(...fm) + 300;
+    const x = i => ML + i / (days.length - 1) * iw;
+    const yv = v => MT + ih - (v - vMin) / (vMax - vMin) * ih;
+    const yf = v => MT + ih - (fMax - v) / (fMax - fMin) * ih;   // 越快＝越高
+    const hms = s => `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}`;
+
+    // 全馬預測面積
+    const fpts = days.map((d, i) => T[d].fm != null ? `${x(i).toFixed(1)},${yf(T[d].fm).toFixed(1)}` : null).filter(Boolean);
+    if (fpts.length > 1) {
+      el("polygon", { points: `${ML},${MT + ih} ` + fpts.join(" ") + ` ${x(days.length - 1)},${MT + ih}`,
+        fill: "var(--s-run)", opacity: .13 }, svg);
+      el("polyline", { points: fpts.join(" "), fill: "none", stroke: "var(--s-run)", "stroke-width": 1.8 }, svg);
+    }
+    // 3:40 目標線
+    const goal = 3 * 3600 + 40 * 60;
+    if (goal >= fMin && goal <= fMax) {
+      el("line", { x1: ML, x2: W - MR, y1: yf(goal), y2: yf(goal), stroke: "var(--s-run)",
+        "stroke-width": 1.4, "stroke-dasharray": "5 4", opacity: .85 }, svg);
+      el("text", { x: W - MR + 4, y: yf(goal) + 4, "font-size": 10.5, fill: "var(--ink-3)" }, svg).textContent = "3:40";
+    }
+    // VO2max 折線（跳過缺值）
+    let seg = [];
+    const flush = () => { if (seg.length > 1) el("polyline", { points: seg.join(" "), fill: "none",
+      stroke: "var(--accent)", "stroke-width": 2.2 }, svg); seg = []; };
+    days.forEach((d, i) => {
+      const v = T[d].vo2;
+      if (v == null) { flush(); return; }
+      seg.push(`${x(i).toFixed(1)},${yv(v).toFixed(1)}`);
+    });
+    flush();
+    // 座標軸
+    for (let g = vMin; g <= vMax; g += 1) {
+      if ((g - vMin) % 2) continue;
+      el("line", { x1: ML, x2: W - MR, y1: yv(g), y2: yv(g), stroke: "var(--grid)", "stroke-width": 1 }, svg);
+      el("text", { x: ML - 8, y: yv(g) + 4, "text-anchor": "end", "font-size": 11, fill: "var(--ink-3)" }, svg).textContent = g;
+    }
+    days.forEach((d, i) => {
+      if (d.slice(8) !== "01") return;
+      el("text", { x: x(i), y: H - 8, "text-anchor": "middle", "font-size": 10.5, fill: "var(--ink-3)" }, svg)
+        .textContent = d.slice(5).replace("-", "/");
+    });
+    // 互動：整條垂直感應區
+    days.forEach((d, i) => {
+      const hit = el("rect", { x: x(i) - iw / days.length / 2, y: MT, width: iw / days.length, height: ih,
+        fill: "transparent" }, svg);
+      const r = T[d];
+      hit.addEventListener("mousemove", ev => showTip(ev, `<b>${d}</b>` +
+        (r.vo2 != null ? `<br>VO2max ${r.vo2}` : "") +
+        (r.fm ? `<br>全馬預測 ${hms(r.fm)}` : "") + (r.hm ? `<br>半馬 ${hms(r.hm)}` : "")));
+      hit.addEventListener("mouseleave", hideTip);
+    });
+    el("text", { x: ML - 8, y: MT - 4, "text-anchor": "end", "font-size": 10, fill: "var(--accent)" }, svg).textContent = "VO2max";
+    // 右軸：全馬預測時間（每 10 分鐘一格）
+    const step = 600;
+    for (let v = Math.ceil(fMin / step) * step; v <= fMax; v += step) {
+      el("text", { x: W - MR + 4, y: yf(v) + 4, "font-size": 10.5, fill: "var(--s-run)" }, svg).textContent = hms(v);
+    }
+    el("text", { x: W - MR + 4, y: MT - 4, "font-size": 10, fill: "var(--s-run)" }, svg).textContent = "全馬預測";
+    $("#trend-chart").appendChild(svg);
+  }
+
+  // ---- 每週心率區間分佈 ----
+  const zdays = Object.keys(Z).sort();
+  if (zdays.length > 3 && $("#zone-chart")) {
+    const monOf = d => { const t = dateOf(d); t.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+      return t.toISOString().slice(0, 10); };
+    const wk = new Map();
+    zdays.forEach(d => {
+      const k = monOf(d), cur = wk.get(k) || [0, 0, 0, 0, 0];
+      Z[d].forEach((s, i) => cur[i] += s);
+      wk.set(k, cur);
+    });
+    const keys = [...wk.keys()].sort();
+    const COL = ["#7d93a8", "#3f9e6a", "#d4a53a", "#d4703a", "#c04848"];
+    const NAME = ["Z1 熱身", "Z2 有氧", "Z3 節奏", "Z4 閾值", "Z5 無氧"];
+    const W = 960, H = 260, ML = 44, MR = 16, MT = 16, MB = 44;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", style: "min-width:660px; display:block;" });
+    const iw = W - ML - MR, ih = H - MT - MB, bw = iw / keys.length;
+    for (let g = 0; g <= 100; g += 25) {
+      const y = MT + ih - g / 100 * ih;
+      el("line", { x1: ML, x2: W - MR, y1: y, y2: y, stroke: "var(--grid)", "stroke-width": 1 }, svg);
+      el("text", { x: ML - 8, y: y + 4, "text-anchor": "end", "font-size": 11, fill: "var(--ink-3)" }, svg).textContent = g + "%";
+    }
+    // 80% 參考線
+    const y80 = MT + ih - 0.8 * ih;
+    el("line", { x1: ML, x2: W - MR, y1: y80, y2: y80, stroke: "var(--accent)", "stroke-width": 1.3,
+      "stroke-dasharray": "5 4", opacity: .8 }, svg);
+    keys.forEach((k, i) => {
+      const z = wk.get(k), tot = z.reduce((a, b) => a + b, 0);
+      if (!tot) return;
+      let acc = 0;
+      const x = ML + i * bw + bw * 0.16, wdt = bw * 0.68;
+      z.forEach((s, j) => {
+        if (!s) return;
+        const h = s / tot * ih;
+        const rect = el("rect", { x: x.toFixed(1), y: (MT + ih - acc - h).toFixed(1), width: wdt.toFixed(1),
+          height: h.toFixed(1), fill: COL[j] }, svg);
+        rect.addEventListener("mousemove", ev => showTip(ev, `<b>${k} 那週</b><br>` +
+          z.map((v, n) => v ? `${NAME[n]} ${Math.round(v / 60)} 分（${(v / tot * 100).toFixed(0)}%）` : null)
+           .filter(Boolean).join("<br>") + `<br>合計 ${Math.round(tot / 60)} 分`));
+        rect.addEventListener("mouseleave", hideTip);
+        acc += h;
+      });
+      const easy = (z[0] + z[1]) / tot * 100;
+      el("text", { x: x + wdt / 2, y: MT + ih - acc - 5, "text-anchor": "middle", "font-size": 10,
+        fill: "var(--ink-3)" }, svg).textContent = easy.toFixed(0) + "%";
+      el("text", { x: x + wdt / 2, y: H - 26, "text-anchor": "middle", "font-size": 10,
+        fill: "var(--ink-3)" }, svg).textContent = k.slice(5).replace("-", "/");
+    });
+    NAME.forEach((n, i) => {
+      const lx = ML + i * 108;
+      el("rect", { x: lx, y: H - 14, width: 9, height: 9, rx: 2, fill: COL[i] }, svg);
+      el("text", { x: lx + 13, y: H - 6, "font-size": 10.5, fill: "var(--ink-3)" }, svg).textContent = n;
+    });
+    $("#zone-chart").appendChild(svg);
+  }
 })();
 
 </script>
