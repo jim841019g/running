@@ -1609,8 +1609,8 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
   const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   const days = Math.round((dateOf(RACE) - dateOf(today)) / 86400000);
   $("#race-countdown").textContent = days > 0
-    ? `距離比賽還有 ${days} 天　·　定位：夏訓驗收，不是主目標賽（主目標是 11/22 南山半馬與 12 月全馬）`
-    : days === 0 ? "就是今天。前 3 km 不准超過心率 155。"
+    ? `距離比賽還有 ${days} 天　·　定位：不拚成績的控制跑（真正的主目標是 11/22 南山半馬與 12 月全馬）`
+    : days === 0 ? `就是今天。前 3 km 不准超過心率 ${(PLAN && PLAN.hr ? PLAN.hr.early_max : 152)}。`
     : `已於 ${RACE} 完賽（${-days} 天前）`;
 
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
@@ -1620,10 +1620,10 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
   // 配速數字的單一來源是 race_plan.json（賽後的比賽報告也讀同一份去比對計畫 vs 實際），
   // 這裡只補每段的提醒文字。
   const NOTES = {
-    1: "起跑段。被人群帶快是最常見的死法，跑到 4:35 要主動慢下來",
-    5: "進入目標配速，這裡開始才是比賽",
-    8: "開始收，心率可以放上 165",
-    10.5: "剩下的不用管了"
+    1: "起跑段。被人群帶快是最常見的死法——跑進 4:45 就要主動慢下來",
+    5: "進入計畫配速，維持到第 7 km 都不要動",
+    8: "有餘裕再收，沒有就維持；不拚成績，撐住等速就算達成",
+    10.5: "最後 500m 想跑就跑"
   };
   const PLAN = (window.RACEPLAN || {})["2026-09-20"];
   const SPLITS = (PLAN && PLAN.splits ? PLAN.splits : [
@@ -1647,10 +1647,11 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
   const hmPB = 99 * 60 + 11;                       // 1:39:11（2026-01 渣打）
   const rPred = riegel(hmPB, 21.0975, DIST);
 
+  // 2026-09-18 使用者定調：這場不拚成績，主目標 4:55 的控制跑。
   const targets = [
-    ["A", "體感 <30°C、狀況好", 280, "pos"],
-    ["B", "典型情況（體感 32°C）", 285, "neu"],
-    ["C", "爆熱或狀況差", 295, "neg"]
+    ["快", "狀況好、露點比預報低", 290, "pos"],
+    ["主", "計畫配速（不拚）", 295, "neu"],
+    ["保守", "露點 ≥24、體感差", 305, "neg"]
   ];
   const tRows = targets.map(([g, cond, pace, cls]) => `
     <div class="compare-cell">
@@ -1674,15 +1675,18 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
         <b>露點 ${dew}°C 是這場比賽最大的變數。</b>露點超過 23°C 等於汗水幾乎蒸發不掉，
         散熱只剩對流，而風速只有 ${WX.wind} km/h——等於沒有風。
         這種條件下心率會比同配速平常高 5–10 下，而且是從一開始就高。
-        <b>把上面的心率紅線當成硬規則，配速目標往 B／C 之間靠</b>：
-        前 3 km 寧可 5:00 也不要 4:45，能不能守住後半才是這場的勝負。</p>` : ""}
+        既然這場本來就不拚，<b>直接把心率當主控、配速當參考</b>：
+        前 3 km 寧可 5:10 也不要 4:50，跑到第 5 km 還覺得輕鬆再回到計畫配速。
+        露點真的爆到 24 以上就退到保守檔（5:05），不要硬撐。</p>` : ""}
     </div>`;
   }
 
   box.innerHTML = wxBlock + `
-    <div style="font-size:14px; margin:0 0 12px;">主目標 <b>B：均速 4:45/km ＝ ${hms(acc)}</b>（依下面的分段表實算，不是平均配速×距離）。
-    這場的重點不是配速，是<b>紀律</b>——你的比賽數據一致指向「前衝後爆、腿先崩」，
-    兩次 5K 測驗與兩次國道賽都是同一個模式。</div>
+    <div style="font-size:14px; margin:0 0 12px;">主目標 <b>均速 4:55/km ＝ ${hms(acc)}</b>（依下面的分段表實算，不是平均配速×距離）。
+    <b>這場不拚成績</b>——Garmin 目前的實力預測是 10.5K 約 4:34/km，所以 4:55 留了約 20 秒/km 的餘裕，
+    是一場「在比賽場地上的控制跑」。真正要全力的是 11/22 南山半馬。
+    既然不拚，這場唯一的任務就是<b>把紀律練起來</b>：前段不被人群帶走、全程等速或微負分段。
+    你的比賽數據一致指向「前衝後爆、腿先崩」，用一場不痛的比賽改掉它，代價最低。</div>
 
     <div class="compare-grid" style="margin-bottom:16px;">${tRows}</div>
 
@@ -1694,10 +1698,10 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
 
     <h3 style="font-size:14px; margin:18px 0 8px;">心率紅線</h3>
     <div style="font-size:13.5px; line-height:1.9;">
-      <div>前 3 km　<b style="color:#c2410c">不准超過 155</b>　← 唯一的硬規定，過了這條線後面一定崩</div>
-      <div>4–7 km　　158–163（你的閾值區間）</div>
-      <div>8 km 之後　165 以上可以</div>
-      <div>最後 1 km　不用管（歷史觀察最高 175）</div>
+      <div>前 3 km　<b style="color:#c2410c">不准超過 ${(PLAN && PLAN.hr ? PLAN.hr.early_max : 152)}</b>　← 唯一的硬規定，過了這條線後面一定崩</div>
+      <div>4–7 km　　${(PLAN && PLAN.hr ? PLAN.hr.mid.join("–") : "155–162")}（控制跑該有的區間，比你的閾值低一點）</div>
+      <div>8 km 之後　${(PLAN && PLAN.hr ? PLAN.hr.late : 165)} 以下都可以接受</div>
+      <div>最後 1 km　想收就收（歷史觀察最高 175）</div>
       <div style="color:var(--ink-2); font-size:12.5px; margin-top:6px;">
         熱天同配速心率本來就高 5–8 下，所以前段<b>寧可慢也不要追配速</b>。</div>
     </div>
@@ -1711,6 +1715,7 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
 
     <h3 style="font-size:14px; margin:18px 0 8px;">配速怎麼算出來的</h3>
     <div style="font-size:12.5px; color:var(--ink-2); line-height:1.85;">
+      <div>· <b>為什麼是 4:55</b>：這是你定的（不拚成績）。下面三個來源講的是「全力跑得動多少」，不是這場的目標——留著是為了讓你知道自己保留了多少。</div>
       <div>· <b>你自己的閾值</b>：8/27 Perth 體感 13.2°C 跑出 3.9k @ 4:36（心率 160、脫鉤僅 +4.1%）；
       台北同強度 8/04 4:52、8/08 4:50（心率 165–166、脫鉤 +11～+14%）→ <b>熱天代價實測 15 s/km</b> → 4:51</div>
       <div>· <b>Garmin 預測</b>${gPred ? `（${SNAP.preddate || ""}）`: ""}：10.5K ${gPred ? hms(gPred) + `／${mmss(gPred / DIST)}` : "—"}</div>
