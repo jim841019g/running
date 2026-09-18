@@ -362,6 +362,12 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
     </section>
 
     <section>
+      <h2>Garmin 設定檢查</h2>
+      <p class="sub">區間設定直接決定上面那張圖、Training Effect 與教練課表的強度判定。這裡把「Garmin 現在的設定」和「你資料裡的實測值」並排——設定改好了，下面的提醒會自己消失。</p>
+      <div class="card" id="hrz-check"></div>
+    </section>
+
+    <section>
       <h2>恢復觀察</h2>
       <div class="insights" id="rcv-insights"></div>
     </section>
@@ -1822,6 +1828,65 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
     });
     $("#zone-chart").appendChild(svg);
   }
+})();
+
+
+// ---- Garmin 心率區間設定檢查 ----
+// 全部由 window.HRZ 即時判斷：設定改掉之後警告會自動消失，不是寫死的提醒。
+(function hrzCheck() {
+  const H = window.HRZ, box = $("#hrz-check");
+  if (!box) return;
+  if (!H || !H.floors) { box.innerHTML = '<p style="margin:0">尚未同步到 Garmin 的心率區間設定。</p>'; return; }
+  const NAME = ["Z1 熱身", "Z2 有氧", "Z3 節奏", "Z4 閾值", "Z5 無氧"];
+  const COL = ["#7d93a8", "#3f9e6a", "#d4a53a", "#d4703a", "#c04848"];
+  const mUsed = H.max_used, mSeen = H.max_seen ? Math.round(H.max_seen) : null;
+  const pct = H.floors.map(f => f / mUsed);
+
+  let rows = `<div class="table-scroll"><table><thead><tr><th>區間</th><th class="num">目前下界</th>
+    <th class="num">佔設定 max</th>${mSeen ? '<th class="num">改用實測 ' + mSeen + ' 會變成</th>' : ''}</tr></thead><tbody>`;
+  H.floors.forEach((f, i) => {
+    rows += `<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${COL[i]};margin-right:6px"></span>${NAME[i]}</td>
+      <td class="num">${f} bpm</td><td class="num">${(pct[i] * 100).toFixed(1)}%</td>` +
+      (mSeen ? `<td class="num">${Math.round(pct[i] * mSeen)} bpm</td>` : "") + "</tr>";
+  });
+  rows += "</tbody></table></div>";
+
+  const facts = `<p style="margin:0 0 12px; font-size:14px;">
+    目前用<b>最大心率百分比</b>（${H.method}）切區間，設定的最大心率是 <b>${mUsed}</b>，安靜心率 ${H.rest_used}。
+    ${H.birth ? `（${mUsed} 接近由生日 ${H.birth} 推出的公式估計值，不是量出來的。）` : ""}</p>`;
+
+  const items = [];
+  if (mSeen && mUsed > mSeen + 2) {
+    items.push(["neg", `最大心率設定 ${mUsed}，但你實測最高只有 ${mSeen}`,
+      `實測最高出現在 ${H.max_seen_date}` +
+      (H.max_seen_ytd ? `；2026 年至今最高只有 ${Math.round(H.max_seen_ytd)}` : "") +
+      `。<b>建議手動設成 ${mSeen}</b>。效果看右邊那欄：Z4 下界會從 ${H.floors[3]} 降到 ${Math.round(pct[3] * mSeen)}，` +
+      `你 threshold 主段的心率（實測中位數 ${H.lthr_obs || "—"}、最高 ${H.lthr_obs_max || "—"}）目前騎在 Z3/Z4 分界上忽上忽下，` +
+      `改完才會穩定落在 Z4——那才是閾值課該待的位置。`]);
+  } else if (mSeen) {
+    items.push(["pos", "最大心率設定與實測相符", `設定 ${mUsed}、實測最高 ${mSeen}，沒有問題。`]);
+  }
+
+  if (H.lthr_used && H.lthr_obs_max && H.lthr_used > H.lthr_obs_max + 5) {
+    items.push(["neg", `乳酸閾值心率 ${H.lthr_used} 不可信${H.lthr_auto ? "（Garmin 自動偵測）" : ""}`,
+      `三個矛盾：① 你 2026 年最高心率才 ${H.max_seen_ytd ? Math.round(H.max_seen_ytd) : "—"}，閾值不可能等於最大心率；` +
+      `② 你實際 threshold 課的<b>主段</b>平均心率中位數是 <b>${H.lthr_obs}</b>（${H.lthr_obs_n} 堂，最高 ${H.lthr_obs_max}）；` +
+      `③ 同一支 API 的閾值配速欄位單位有問題。<b>建議關掉自動偵測、手動設在 160–165</b>。` +
+      `這個數字會影響 Training Effect 與 Garmin 教練排課的強度，不只是圖表好不好看。`]);
+  } else if (H.lthr_used) {
+    items.push(["pos", "乳酸閾值心率與實測相符", `設定 ${H.lthr_used}、你主段實測最高 ${H.lthr_obs_max || "—"}。`]);
+  }
+
+  box.innerHTML = facts + rows +
+    '<div class="insights" style="margin-top:14px">' +
+    items.map(([cls, title, body]) => {
+      const tag = cls === "pos" ? "OK" : "待調整";
+      return `<div class="insight"><h3><span class="tag ${cls}">${tag}</span>${title}</h3><p>${body}</p></div>`;
+    }).join("") + "</div>" +
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:12px 2px 0">' +
+    '改法：Garmin Connect →「使用者設定」→「心率區間」，把最大心率改為手動；閾值心率在同一頁。' +
+    '想要更準的最大心率，10 月轉涼後做一次 5 分鐘全力爬坡或 3×3 分鐘遞增到力竭再量一次——' +
+    '你 2026 沒碰過 175 以上，很可能是夏天推不上去，而不是體能退步。</p>';
 })();
 
 </script>
