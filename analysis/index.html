@@ -1604,6 +1604,7 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
 (function raceCard() {
   const box = $("#race-card");
   if (!box) return;
+  const WX = (window.RACEWX || {})["2026-09-20"];
   const RACE = "2026-09-20", NAME = "永慶盃 10.5K", DIST = 10.5;
   const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   const days = Math.round((dateOf(RACE) - dateOf(today)) / 86400000);
@@ -1658,7 +1659,27 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
       <div style="font-size:12.5px; color:var(--ink-2);">${cond}</div>
     </div>`).join("");
 
-  box.innerHTML = `
+  // 賽前預報（race_wx.py 每天更新，超出預報範圍就不會有）——這比歷史同期平均重要得多
+  let wxBlock = "";
+  if (WX && days >= 0) {
+    const dew = WX.dew;
+    const band = dew >= 24 ? ["極度嚴苛", "neg"] : dew >= 21 ? ["很吃力", "neg"]
+               : dew >= 18 ? ["開始有感", "neu"] : ["還算舒適", "pos"];
+    wxBlock = `<div class="card" style="margin:0 0 16px; border-left:3px solid var(--accent);">
+      <h3 style="font-size:14px; margin:0 0 6px;">當天預報（${WX.days_ahead} 天後 · ${WX.fetched} 更新）</h3>
+      <div style="font-size:14px;">起跑時段 ${String(WX.hour).padStart(2, "0")}:00　
+        氣溫 <b>${WX.t}°C</b>、體感 <b>${WX.feels}°C</b>、濕度 ${WX.rh}%、
+        露點 <b>${dew}°C（${band[0]}）</b>、降雨機率 ${WX.pop}%、風 ${WX.wind} km/h</div>
+      ${dew >= 23 ? `<p style="margin:8px 0 0; font-size:13.5px;">
+        <b>露點 ${dew}°C 是這場比賽最大的變數。</b>露點超過 23°C 等於汗水幾乎蒸發不掉，
+        散熱只剩對流，而風速只有 ${WX.wind} km/h——等於沒有風。
+        這種條件下心率會比同配速平常高 5–10 下，而且是從一開始就高。
+        <b>把上面的心率紅線當成硬規則，配速目標往 B／C 之間靠</b>：
+        前 3 km 寧可 5:00 也不要 4:45，能不能守住後半才是這場的勝負。</p>` : ""}
+    </div>`;
+  }
+
+  box.innerHTML = wxBlock + `
     <div style="font-size:14px; margin:0 0 12px;">主目標 <b>B：均速 4:45/km ＝ ${hms(acc)}</b>（依下面的分段表實算，不是平均配速×距離）。
     這場的重點不是配速，是<b>紀律</b>——你的比賽數據一致指向「前衝後爆、腿先崩」，
     兩次 5K 測驗與兩次國道賽都是同一個模式。</div>
@@ -1694,7 +1715,9 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
       台北同強度 8/04 4:52、8/08 4:50（心率 165–166、脫鉤 +11～+14%）→ <b>熱天代價實測 15 s/km</b> → 4:51</div>
       <div>· <b>Garmin 預測</b>${gPred ? `（${SNAP.preddate || ""}）`: ""}：10.5K ${gPred ? hms(gPred) + `／${mmss(gPred / DIST)}` : "—"}</div>
       <div>· <b>Riegel 從半馬 PB 推</b>（1:39:11，2026-01 渣打，涼天）：10.5K ${hms(rPred)}／${mmss(rPred / DIST)}</div>
-      <div>· <b>當天天氣</b>：台北近三年 9/20 早上 06:00 體感 28.8–32.4°C、07:00 31.6–34.2°C（Open-Meteo 歷史資料）——這場不會涼。</div>
+      ${WX ? `<div>· <b>當天預報</b>（${WX.fetched} 抓）：體感 ${WX.feels}°C、露點 ${WX.dew}°C、濕度 ${WX.rh}%——
+        露點比近三年同期（約 21–22°C）更差，抵銷掉一部分近期的體能進步。</div>` : ""}
+      <div id="race-wx-line">· <b>當天天氣</b>：台北近三年 9/20 早上 06:00 體感 28.8–32.4°C、07:00 31.6–34.2°C（Open-Meteo 歷史資料）——這場不會涼。</div>
     </div>`;
 })();
 
@@ -1855,8 +1878,19 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
     目前用<b>最大心率百分比</b>（${H.method}）切區間，設定的最大心率是 <b>${mUsed}</b>，安靜心率 ${H.rest_used}。
     ${H.birth ? `（${mUsed} 接近由生日 ${H.birth} 推出的公式估計值，不是量出來的。）` : ""}</p>`;
 
+  // 使用者 2026-09-18 決定：最大心率維持 186（公式值），不改成實測的 181。
+  // 所以這裡只做「已確認」的紀錄，不再當成待調整項目；哪天設定被改動，檢查會自己恢復。
+  const ACK_MAX = 186;
+
   const items = [];
-  if (mSeen && mUsed > mSeen + 2) {
+  if (mUsed === ACK_MAX) {
+    items.push(["neu", `最大心率維持 ${mUsed}（已確認）`,
+      `實測最高 ${mSeen}（${H.max_seen_date}）、2026 年至今最高 ${H.max_seen_ytd ? Math.round(H.max_seen_ytd) : "—"}，` +
+      `你決定沿用公式值 ${mUsed}。要記得的副作用只有一個：Z4 下界因此停在 ${H.floors[3]}，` +
+      `而你 threshold 主段心率是 ${H.lthr_obs || "—"}–${H.lthr_obs_max || "—"}，正好騎在 Z3/Z4 分界上——` +
+      `所以<b>「訓練強度分佈」那張圖會把一部分閾值課算進 Z3</b>，看那張圖時要記得這件事。` +
+      `報告裡的主段分析不受影響（它用的是實際心率與配速，不是區間）。`]);
+  } else if (mSeen && mUsed > mSeen + 2) {
     items.push(["neg", `最大心率設定 ${mUsed}，但你實測最高只有 ${mSeen}`,
       `實測最高出現在 ${H.max_seen_date}` +
       (H.max_seen_ytd ? `；2026 年至今最高只有 ${Math.round(H.max_seen_ytd)}` : "") +
@@ -1880,13 +1914,15 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
   box.innerHTML = facts + rows +
     '<div class="insights" style="margin-top:14px">' +
     items.map(([cls, title, body]) => {
-      const tag = cls === "pos" ? "OK" : "待調整";
+      const tag = cls === "pos" ? "OK" : cls === "neu" ? "已確認" : "待調整";
       return `<div class="insight"><h3><span class="tag ${cls}">${tag}</span>${title}</h3><p>${body}</p></div>`;
     }).join("") + "</div>" +
     '<p style="font-size:12.5px;color:var(--ink-3);margin:12px 2px 0">' +
-    '改法：Garmin Connect →「使用者設定」→「心率區間」，把最大心率改為手動；閾值心率在同一頁。' +
-    '想要更準的最大心率，10 月轉涼後做一次 5 分鐘全力爬坡或 3×3 分鐘遞增到力竭再量一次——' +
-    '你 2026 沒碰過 175 以上，很可能是夏天推不上去，而不是體能退步。</p>';
+    (mUsed === ACK_MAX
+      ? '閾值心率的改法：Garmin Connect →「使用者設定」→「心率區間」，關掉自動偵測後手動填。'
+      : '改法：Garmin Connect →「使用者設定」→「心率區間」，把最大心率改為手動；閾值心率在同一頁。') +
+    '（想重新量最大心率的話，10 月轉涼後做一次 5 分鐘全力爬坡或 3×3 分鐘遞增到力竭——' +
+    '你 2026 沒碰過 175 以上，很可能是夏天推不上去，而不是體能退步。）</p>';
 })();
 
 </script>
