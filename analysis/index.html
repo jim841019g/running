@@ -1616,20 +1616,20 @@ const chip = (l, v) => `<div class="compare-cell" style="padding:8px 12px;"><div
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
   const hms = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
-  // 分段計畫（秒/km）——刻意負分段：前段慢 10 秒，最後 2.5 km 收
-  const SPLITS = [
-    [1, 295, "起跑段。被人群帶快是最常見的死法，跑到 4:35 要主動慢下來"],
-    [2, 290, ""],
-    [3, 287, ""],
-    [4, 287, ""],
-    [5, 285, "進入目標配速，這裡開始才是比賽"],
-    [6, 285, ""],
-    [7, 285, ""],
-    [8, 282, "開始收，心率可以放上 165"],
-    [9, 282, ""],
-    [10, 278, ""],
-    [10.5, 270, "剩下的不用管了"]
-  ];
+  // 分段計畫（秒/km）——刻意負分段：前段慢 10 秒，最後 2.5 km 收。
+  // 配速數字的單一來源是 race_plan.json（賽後的比賽報告也讀同一份去比對計畫 vs 實際），
+  // 這裡只補每段的提醒文字。
+  const NOTES = {
+    1: "起跑段。被人群帶快是最常見的死法，跑到 4:35 要主動慢下來",
+    5: "進入目標配速，這裡開始才是比賽",
+    8: "開始收，心率可以放上 165",
+    10.5: "剩下的不用管了"
+  };
+  const PLAN = (window.RACEPLAN || {})["2026-09-20"];
+  const SPLITS = (PLAN && PLAN.splits ? PLAN.splits : [
+    [1, 295], [2, 290], [3, 287], [4, 287], [5, 285], [6, 285],
+    [7, 285], [8, 282], [9, 282], [10, 278], [10.5, 270]
+  ]).map(([k, s]) => [k, s, NOTES[k] || ""]);
   let acc = 0;
   const rows = SPLITS.map(([km, pace, note], i) => {
     const seg = i === SPLITS.length - 1 ? 0.5 : 1;
