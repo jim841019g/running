@@ -893,6 +893,14 @@ const riegel = (sec, km) => sec * Math.pow(MARA/km, 1.06);
 })();
 
 // ---- Tab 切換 ----
+// 支援用網址 hash 直接開某個分頁（主頁的「下一場比賽」就是連 #plan）
+(function openFromHash() {
+  const id = (location.hash || "").replace("#", "");
+  if (!id || !document.getElementById("tab-" + id)) return;
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset && b.dataset.tab === id));
+  document.querySelectorAll(".tabpane").forEach(p => p.hidden = p.id !== "tab-" + id);
+})();
+
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b === btn));
