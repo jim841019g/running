@@ -181,7 +181,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
     <div class="hero-meta">
       <span id="meta-range"></span>
       <span id="meta-count"></span>
-      <span>資料來源：Strava（strava-mcp，更新至 2026-08-05）</span>
+      <span id="meta-src"></span>
     </div>
     <div class="goal-chip"><span class="goal-dot"></span>目標：<b>馬拉松 3:40</b>（2026-12-19 前）＝ 均速 <b class="num" id="goal-pace"></b> /km</div>
   </header>
@@ -193,7 +193,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
     <button class="tab-btn" data-tab="recovery" role="tab">恢復</button>
     <button class="tab-btn" data-tab="races" role="tab">比賽分析</button>
     <button class="tab-btn" data-tab="plan" role="tab">訓練建議</button>
-    <a class="tab-btn" href="https://jim841019g.github.io/running/map/" style="text-decoration:none;">足跡地圖 ↗</a>
+    <a class="tab-btn" href="../map/" style="text-decoration:none;">足跡地圖 ↗</a>
   </nav>
 
   <div class="tabpane" id="tab-overview">
@@ -278,7 +278,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
     <section>
       <h2>單次跑步報告</h2>
       <p class="sub">每次跑完的完整分析（分段、心率飄移、課表推斷）都在跑後報告區，每日自動更新。</p>
-      <div class="card"><a href="https://jim841019g.github.io/running/reports/" style="color:var(--accent-ink); font-weight:600; text-decoration:none;">→ 開啟跑後報告列表</a></div>
+      <div class="card"><a href="../reports/" style="color:var(--accent-ink); font-weight:600; text-decoration:none;">→ 開啟跑後報告列表</a></div>
     </section>
 
     <section>
@@ -515,7 +515,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border
   
 
   <footer>
-    所有統計皆由本頁內嵌的 Strava 活動原始資料（含 2014 年 2 筆歷史紀錄與 2023-12 至 2026-08 的完整活動）即時計算。
+    所有統計皆由 Strava 活動原始資料（含 2014 年起手動補登的歷史比賽，與 <span id="foot-range"></span> 的完整活動）即時計算。
     配速 = 移動時間 ÷ 距離。全馬預測採 Riegel 公式 t₂ = t₁ × (d₂/d₁)^1.06，僅為體能外推，未計入補給與配速策略。
   </footer>
 </div>
@@ -580,7 +580,12 @@ $("#goal-pace").textContent = fmtPace(goalPace);
 
 const dates = modern.map(a => a.d).sort();
 $("#meta-range").textContent = `${dates[0]} ～ ${dates[dates.length-1]}（另含 2014–2023 手動補登的歷史比賽）`;
-$("#meta-count").textContent = `共 ${A.length} 筆活動 · 體重 63 kg`;
+// 這三行以前是寫死的（資料日期停在 2026-08-05、體重 63 kg、「約 19 週」），
+// 全部改成由資料算——頁面每天重建，寫死的數字一定會過期。
+const _w = (window.HRZ || {}).weight;
+$("#meta-count").textContent = `共 ${A.length} 筆活動` + (_w ? ` · 體重 ${_w} kg` : "");
+$("#meta-src").textContent = `資料來源：Strava ＋ Garmin · 資料至 ${dates[dates.length-1]}`;
+const _fr = $("#foot-range"); if (_fr) _fr.textContent = `${dates[0].slice(0,7)} 至 ${dates[dates.length-1].slice(0,7)}`;
 
 const hms = A.filter(a => a.r && a.m > 15000 && a.m < 30000 && a.s/(a.m/1000) <= 480).sort((a,b) => a.d < b.d ? -1 : 1);
 const bestHM = hms.reduce((b,a) => a.s < b.s ? a : b, hms[0]);
@@ -860,7 +865,11 @@ const riegel = (sec, km) => sec * Math.pow(MARA/km, 1.06);
 // ---- 觀察與建議 ----
 (function insights() {
   const kmBetween = (from, to) => runs.filter(a => a.d >= from && a.d <= to).reduce((k,a) => k + a.m, 0) / 1000;
-  const recent4 = kmBetween("2026-07-08", "2026-08-04") / 4;
+  // 以「資料最後一天」往回推 28 天，不要寫死區間（原本凍在 2026-07-08～08-04，整整過期七週）
+  const _last = dates[dates.length - 1];
+  const _r4from = new Date(dateOf(_last).getTime() - 27 * 864e5).toISOString().slice(0, 10);
+  const recent4 = kmBetween(_r4from, _last) / 4;
+  const _r4label = `${_r4from.slice(5).replace("-", "/")}–${_last.slice(5).replace("-", "/")}`;
   const scPrep = kmBetween("2025-11-17", "2026-01-11") / 8;   // 渣打備賽 8 週
   const juneRuns = runs.filter(a => a.d >= "2026-06-01" && a.d <= "2026-06-30");
   const first = hms.find(a => a.d >= "2024-01-01");
@@ -882,7 +891,7 @@ const riegel = (sec, km) => sec * Math.pow(MARA/km, 1.06);
   const items = [
     ["pos", "十二年的進步軌跡", `生涯首半馬是 2014 渣打的 2:12:28，PB 是 2026 渣打的 ${fmtDur(bestHM.s)}——十二年快了 33 分鐘。中間的故事很完整：2015 首全馬 5:14:04（至今仍是你的全馬 PB，12 月就是刷新它的日子——目標 3:40 等於比十一年前的自己快 1 小時 34 分）、2016 之後長休、2023 台南古都 2:34 復出探路、2023-12 重啟訓練後 ${first.d.slice(0,7)} 跑回 ${fmtDur(first.s)}，然後兩年推進 ${gain.toFixed(0)} 分鐘；步頻也從 2024 上半年的 ${Math.round(cad24)} spm 提升到 2026 年的 ${Math.round(cad26)} spm。`],
     ["neu", "體能基準：一月是巔峰，現在在回升路上", `以 1/11 渣打 ${fmtDur(bestHM.s)} 外推，全馬約 ${fmtDur(Math.round(pBest))} —— 一月的體能跑 3:40 綽綽有餘。但 3/8 國道掉到 ${fmtDur(hmGd.s)}（外推 ${fmtDur(Math.round(pGd))}），4/26 國家地理 ${fmtDur(hmNg.s)}（外推 ${fmtDur(Math.round(pNg))}），加上 7/1 自述「胖了五公斤」，目前體能明顯低於年初。好消息是：你證明過自己到得了那裡。`],
-    ["neg", "跑量是最大缺口", `渣打備賽期（2025-11-17 起 8 週）週均 ${scPrep.toFixed(1)} km，近四週（7/8–8/4）只有 ${recent4.toFixed(1)} km；六月只跑了 ${juneRuns.length} 次、共 ${(juneRuns.reduce((k,a)=>k+a.m,0)/1000).toFixed(1)} km。全馬 3:40 的常見準備量是週 45–60 km，距 12/19 目標約 19 週，足夠重建，但要從現在開始每週穩定加量（+10% 以內）。`],
+    ["neg", "跑量是最大缺口", `渣打備賽期（2025-11-17 起 8 週）週均 ${scPrep.toFixed(1)} km，近四週（${_r4label}）只有 ${recent4.toFixed(1)} km；六月只跑了 ${juneRuns.length} 次、共 ${(juneRuns.reduce((k,a)=>k+a.m,0)/1000).toFixed(1)} km。全馬 3:40 的常見準備量是週 45–60 km，距 12/19 目標約 ${Math.max(0, Math.round((dateOf("2026-12-19") - Date.now()) / 6048e5))} 週，足夠重建，但要從現在開始每週穩定加量（+10% 以內）。`],
     ["neg", "長距離要補（強度先別急）", `一二月能吃 6–8km @ 4:30 的 tempo；8/4 的 Threshold 15min @ 4:45「降速求生存」——但別忘了現在是夏天，配速掉是正常的（詳見「七月以來」分頁的同期對照）。真正的缺口在長距離：5 月以來最長訓練跑僅 ${fmtKm(longestSinceMay.m)} km，全馬備賽需把 long run 逐步拉回 28–32 km。夏天用時間與心率控課，等 10 月轉涼再追配速。`],
     ["neu", "建議的路線圖", `參考你 2025-11 → 2026-01 那次成功的渣打備賽（8 週週均 ${scPrep.toFixed(0)} km → PB），複製同樣的爬坡：8–9 月有氧重建（週 30–40 km）、10–11 月專項期（週 45+ km、long run 25 km+、加入 5:13/km 馬拉松配速段）、12 月初減量。十月安排一場半馬檢驗——能跑回 1:45 以內，3:40 就有底氣。`]
   ];
