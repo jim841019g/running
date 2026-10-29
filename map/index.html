@@ -42,6 +42,7 @@
   <div class="regions" id="regions"></div>
   <div class="stats" id="stats"></div>
 </div>
+<script src="places.js"></script>
 <script src="routes.js"></script>
 <script>
 const decode = p => {
@@ -65,7 +66,8 @@ L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_M
 }).addTo(map);
 
 // [緯度, 經度, 地點, 國家] —— 國家欄位供選單第一層分組用
-const KNOWN = [
+// 地點清單由 places.js 提供（gen_places.py 產生）；抓不到才用下面這份內建備援。
+const KNOWN = window.PLACES || [
   [25.04, 121.54, "台北（主場）", "🇹🇼 台灣"],
   [25.0296, 121.5357, "大安森林公園", "🇹🇼 台灣"],
   [24.81, 121.24, "桃園・石門水庫", "🇹🇼 台灣"],
